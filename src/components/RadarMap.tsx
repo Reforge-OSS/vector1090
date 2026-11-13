@@ -7,7 +7,7 @@ import {
   type Map as Radar,
 } from "maplibre-gl";
 import type { FeatureCollection, Feature, Point, LineString } from "geojson";
-import type { Aircraft, Settings } from "@/lib/types";
+import type { Aircraft, MapViewport, Settings } from "@/lib/types";
 import type { Trails } from "@/hooks/useAircraftFeed";
 import {
   altitudeColor,
@@ -17,6 +17,7 @@ import {
 } from "@/lib/aircraftStyle";
 import { circlePolygon, deadReckon, destinationPoint } from "@/lib/geo";
 import palette from "@/lib/palette.json";
+import { viewportRadius } from "@/lib/feeds";
 
 interface Props {
   aircraft: Aircraft[];
@@ -27,6 +28,7 @@ interface Props {
   onSelect: (hex: string | null) => void;
   showAllTrails: boolean;
   units: Settings["units"];
+  onViewportChange: (viewport: MapViewport) => void;
 }
 const paths = {
   jet: "M32 3 Q35 3 35 12 L35 25 L56 40 L56 45 L35 37 L35 52 L43 58 L43 61 L32 57 L21 61 L21 58 L29 52 L29 37 L8 45 L8 40 L29 25 L29 12 Q29 3 32 3Z",
@@ -93,10 +95,32 @@ export default function RadarMap(props: Props) {
     });
     map.touchZoomRotate.disableRotation();
     mapRef.current = map;
+    const reportViewport = () => {
+      const center = {
+        lat: map.getCenter().lat,
+        lon: ((((map.getCenter().lng + 180) % 360) + 360) % 360) - 180,
+      };
+      const currentBounds = map.getBounds();
+      const bounds = {
+        west: currentBounds.getWest(),
+        east: currentBounds.getEast(),
+        south: currentBounds.getSouth(),
+        north: currentBounds.getNorth(),
+      };
+      latest.current.onViewportChange({
+        center,
+        bounds,
+        zoom: map.getZoom(),
+        radiusNm: viewportRadius(center, bounds),
+      });
+    };
+    map.on("moveend", reportViewport);
+    map.on("resize", reportViewport);
     map.on("error", () => {
       if (!disposed) setError("Map resource unavailable");
     });
     map.on("load", async () => {
+      reportViewport();
       for (const layer of map.getStyle().layers) {
         if (layer.type === "symbol")
           map.setPaintProperty(layer.id, "text-opacity", 0.65);

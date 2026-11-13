@@ -5,7 +5,10 @@ import { DEFAULT_SETTINGS, type Settings } from "@/lib/types";
 const KEY = "vector1090:settings";
 export function sanitizeSettings(input: Partial<Settings>): Settings {
   const merged = { ...DEFAULT_SETTINGS, ...input };
-  merged.mode = merged.mode === "local" ? "local" : "public";
+  merged.mode =
+    merged.mode === "local" || merged.mode === "hybrid"
+      ? merged.mode
+      : "public";
   merged.units = merged.units === "metric" ? "metric" : "aviation";
   for (const key of [
     "homeLat",
@@ -20,11 +23,13 @@ export function sanitizeSettings(input: Partial<Settings>): Settings {
   merged.homeLon = Math.max(-180, Math.min(180, merged.homeLon));
   merged.radiusNm = Math.max(1, Math.min(250, merged.radiusNm));
   merged.pollIntervalSec = Math.max(
-    merged.mode === "public" ? 5 : 1,
+    merged.mode === "local" ? 1 : 5,
     merged.pollIntervalSec,
   );
   if (typeof merged.localUrl !== "string")
     merged.localUrl = DEFAULT_SETTINGS.localUrl;
+  if (typeof merged.trackViewport !== "boolean")
+    merged.trackViewport = DEFAULT_SETTINGS.trackViewport;
   return merged;
 }
 export function useSettings() {

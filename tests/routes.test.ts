@@ -8,6 +8,7 @@ beforeEach(() => {
   for (const name of [
     "ALLOW_CLIENT_LOCAL_URL",
     "LOCAL_AIRCRAFT_URL",
+    "LOCAL_RECEIVER_URL",
     "FEED_MODE",
     "ADSB_API_BASE",
     "ADSB_API_KEY",
@@ -71,7 +72,7 @@ describe("aircraft route", () => {
     fetcher.mockResolvedValue(Response.json({ ac: [] }));
     const result = await aircraft("?lat=52&lon=-1&radius=999");
     expect(String(fetcher.mock.calls[0][0])).toBe(
-      "https://api.adsb.lol/v2/point/52/-1/250",
+      "https://api.adsb.lol/v2/lat/52/lon/-1/dist/250",
     );
     expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({
       "User-Agent":
@@ -87,22 +88,161 @@ describe("aircraft route", () => {
       expect(fetcher).not.toHaveBeenCalled();
     },
   );
-  it("forwards rate-limit deadlines and reports upstream failures without caching", async () => {
+  it("forwards rate limits and skips every other public query during cooldown", async () => {
     fetcher.mockResolvedValueOnce(
       new Response(null, { status: 429, headers: { "Retry-After": "45" } }),
     );
     const limited = await aircraft();
     expect(limited.status).toBe(429);
-    expect(await limited.json()).toEqual({
+    expect(await limited.json()).toMatchObject({
       error: "rate_limited",
-      retryAfter: "45",
+      retryAfter: 45,
+      sources: { public: "rate_limited" },
     });
-    fetcher.mockResolvedValueOnce(new Response(null, { status: 503 }));
-    expect((await aircraft()).status).toBe(502);
-    fetcher.mockRejectedValueOnce(new DOMException("timed out", "AbortError"));
-    const failed = await aircraft();
-    expect(failed.headers.get("Cache-Control")).toBe("no-store");
-    expect(await failed.json()).toEqual({ error: "upstream_timeout" });
+    const skipped = await aircraft("?scope=global");
+    expect(skipped.status).toBe(429);
+    expect(skipped.headers.get("X-Cache")).toBe("cooldown");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each(["http", "timeout"])(
+    "reports %s failures with no browser caching",
+    async (failure) => {
+      if (failure === "http")
+        fetcher.mockResolvedValueOnce(new Response(null, { status: 503 }));
+      else
+        fetcher.mockRejectedValueOnce(
+          new DOMException("timed out", "AbortError"),
+        );
+      const failed = await aircraft();
+      expect(failed.status).toBe(502);
+      expect(failed.headers.get("Cache-Control")).toBe("no-store");
+      expect(await failed.json()).toMatchObject({
+        error: failure === "http" ? "upstream_503" : "upstream_timeout",
+        sources: { public: "error" },
+      });
+    },
+  );
+  it("returns cache headers for identical normalized area queries", async () => {
+    fetcher.mockImplementation(async () => Response.json({ ac: [] }));
+    expect(
+      (await aircraft("?lat=40.64&lon=-73.78&radius=80")).headers.get(
+        "X-Cache",
+      ),
+    ).toBe("miss");
+    expect(
+      (await aircraft("?lat=40.66&lon=-73.79&radius=90")).headers.get(
+        "X-Cache",
+      ),
+    ).toBe("hit");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("prefers the primary receiver env name over the legacy alias", async () => {
+    vi.stubEnv("LOCAL_RECEIVER_URL", "http://primary/feed");
+    vi.stubEnv("LOCAL_AIRCRAFT_URL", "http://legacy/feed");
+    fetcher.mockResolvedValueOnce(Response.json({ aircraft: [] }));
+    await aircraft("?mode=local");
+    expect(String(fetcher.mock.calls[0][0])).toBe("http://primary/feed");
+  });
+  it("merges hybrid feeds by hex, with local telemetry and no client URL override", async () => {
+    vi.stubEnv("LOCAL_RECEIVER_URL", "http://receiver/feed");
+    vi.stubEnv("ALLOW_CLIENT_LOCAL_URL", "true");
+    vi.stubEnv("FEED_MODE", "HYBRID");
+    fetcher.mockImplementation(async (url) =>
+      String(url) === "http://receiver/feed"
+        ? Response.json({
+            aircraft: [
+              { hex: "abc123", flight: "LOCAL", alt_baro: 1234 },
+              { hex: "fed987" },
+            ],
+          })
+        : Response.json({
+            ac: [
+              { hex: "abc123", flight: "PUBLIC", alt_baro: 30000 },
+              { hex: "def456" },
+            ],
+          }),
+    );
+    const result = await aircraft("?url=http://ignored/feed");
+    expect(result.status).toBe(200);
+    const body = await result.json();
+    expect(body).toMatchObject({
+      mode: "hybrid",
+      total: 3,
+      sources: { local: "ok", public: "ok" },
+    });
+    expect(
+      body.aircraft.find((ac: { hex: string }) => ac.hex === "abc123"),
+    ).toMatchObject({ flight: "LOCAL", alt_baro: 1234, feedSource: "local" });
+    expect(
+      body.aircraft.find((ac: { hex: string }) => ac.hex === "def456")
+        .feedSource,
+    ).toBe("public");
+    expect(fetcher.mock.calls.map(([url]) => String(url))).not.toContain(
+      "http://ignored/feed",
+    );
+  });
+  it.each(["local", "public", "rate_limited"])(
+    "keeps the working hybrid feed when %s fails",
+    async (failure) => {
+      vi.stubEnv("LOCAL_RECEIVER_URL", "http://receiver/feed");
+      fetcher.mockImplementation(async (url) => {
+        const local = String(url) === "http://receiver/feed";
+        if ((failure === "local" && local) || (failure === "public" && !local))
+          throw new Error("offline");
+        if (failure === "rate_limited" && !local)
+          return new Response(null, {
+            status: 429,
+            headers: { "Retry-After": "60" },
+          });
+        return Response.json({
+          aircraft: [{ hex: local ? "abc123" : "def456" }],
+        });
+      });
+      const response = await aircraft("?mode=hybrid");
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.aircraft).toHaveLength(1);
+      expect(body.sources).toEqual({
+        local: failure === "local" ? "error" : "ok",
+        public:
+          failure === "local"
+            ? "ok"
+            : failure === "rate_limited"
+              ? "rate_limited"
+              : "error",
+      });
+      if (failure === "rate_limited") expect(body.retryAfter).toBe(60);
+    },
+  );
+  it("aligns cached public and fresh local ages to the response timestamp", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("LOCAL_RECEIVER_URL", "http://receiver/feed");
+    const now = Date.now() / 1000;
+    fetcher.mockImplementation(async (url) =>
+      String(url) === "http://receiver/feed"
+        ? Response.json({
+            now: now + 4,
+            aircraft: [{ hex: "abc123", seen: 2 }],
+          })
+        : Response.json({ now, ac: [{ hex: "def456", seen: 3 }] }),
+    );
+    await aircraft();
+    const response = await (await aircraft("?mode=hybrid")).json();
+    expect(response.now).toBe(now + 4);
+    expect(
+      response.aircraft.find((ac: { hex: string }) => ac.hex === "def456").seen,
+    ).toBe(7);
+    expect(
+      response.aircraft.find((ac: { hex: string }) => ac.hex === "abc123").seen,
+    ).toBe(2);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("disables an unconfigured hybrid receiver and still serves public aircraft", async () => {
+    fetcher.mockResolvedValueOnce(Response.json({ ac: [] }));
+    expect(await (await aircraft("?mode=hybrid")).json()).toMatchObject({
+      sources: { local: "disabled", public: "ok" },
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -113,11 +253,13 @@ describe("receiver configuration", () => {
     expect(await (await GET()).json()).toEqual({
       allowClientLocalUrl: false,
       localUrlConfigured: true,
+      localReceiverConfigured: true,
     });
     vi.stubEnv("ALLOW_CLIENT_LOCAL_URL", "true");
     expect(await (await GET()).json()).toEqual({
       allowClientLocalUrl: true,
       localUrlConfigured: true,
+      localReceiverConfigured: true,
     });
   });
 });

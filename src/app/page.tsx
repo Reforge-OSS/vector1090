@@ -10,16 +10,25 @@ import Inspector from "@/components/Inspector";
 import SettingsModal from "@/components/SettingsModal";
 import AtcPlayer from "@/components/AtcPlayer";
 import { filterAircraft, type AircraftFilter } from "@/lib/filters";
+import type { MapViewport } from "@/lib/types";
 
 const RadarMap = dynamic(() => import("@/components/RadarMap"), { ssr: false });
 export default function Home() {
   const { settings, setSettings } = useSettings();
   const receiverConfig = useReceiverConfig();
   const [paused, setPaused] = useState(false);
+  const [viewport, setViewport] = useState<MapViewport | null>(null);
+  const [debouncedViewport, setDebouncedViewport] =
+    useState<MapViewport | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedViewport(viewport), 800);
+    return () => clearTimeout(timer);
+  }, [viewport]);
   const feed = useAircraftFeed(
     settings,
     paused,
     receiverConfig.allowClientLocalUrl,
+    debouncedViewport,
   );
   const [selectedHex, setSelectedHex] = useState<string | null>(null);
   const [trails, setTrails] = useState(false);
@@ -83,6 +92,7 @@ export default function Home() {
         onSelect={select}
         showAllTrails={trails}
         units={settings.units}
+        onViewportChange={setViewport}
       />
       <TopHud
         mode={settings.mode}

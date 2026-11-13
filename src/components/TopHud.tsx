@@ -26,7 +26,7 @@ export default function TopHud(p: Props) {
   const color =
     p.status === "online"
       ? "bg-sage"
-      : p.status === "paused"
+      : p.status === "paused" || p.status === "partial"
         ? "bg-sand"
         : p.status === "connecting"
           ? "bg-ground"
@@ -42,7 +42,11 @@ export default function TopHud(p: Props) {
       </button>
       <Logo />
       <span className="mode-chip">
-        {p.mode === "public" ? "Public API" : "Local receiver"}
+        {p.mode === "public"
+          ? "Public API"
+          : p.mode === "hybrid"
+            ? "Hybrid"
+            : "Local receiver"}
       </span>
       <div className="hud-status">
         <span className={"status-dot " + color} />
