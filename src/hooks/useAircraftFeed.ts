@@ -2,10 +2,19 @@
 import { useEffect, useRef, useState } from "react";
 import type { Aircraft, AircraftResponse, Settings } from "@/lib/types";
 
-export interface TrailPoint { lon: number; lat: number; alt: Aircraft["alt_baro"] }
+export interface TrailPoint {
+  lon: number;
+  lat: number;
+  alt: Aircraft["alt_baro"];
+}
 export type Trails = Map<string, TrailPoint[]>;
-export type FeedStatus = "connecting" | "online" | "paused" | "rate-limited" | "error";
-export function useAircraftFeed(settings: Settings, userPaused: boolean) {
+export type FeedStatus =
+  "connecting" | "online" | "paused" | "rate-limited" | "error";
+export function useAircraftFeed(
+  settings: Settings,
+  userPaused: boolean,
+  allowClientLocalUrl = false,
+) {
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
   const [status, setStatus] = useState<FeedStatus>("connecting");
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
@@ -13,15 +22,33 @@ export function useAircraftFeed(settings: Settings, userPaused: boolean) {
   const trailsRef = useRef<Trails>(new Map());
   const lastSeenRef = useRef(new Map<string, number>());
   const retryNotBefore = useRef(0);
-  const { mode, homeLat, homeLon, radiusNm, localUrl, pollIntervalSec } = settings;
+  const { mode, homeLat, homeLon, radiusNm, localUrl, pollIntervalSec } =
+    settings;
+  const source = JSON.stringify(
+    mode === "public"
+      ? [mode, homeLat, homeLon, radiusNm]
+      : [mode, localUrl, allowClientLocalUrl],
+  );
+  const sourceRef = useRef(source);
   useEffect(() => {
+    if (sourceRef.current !== source) {
+      sourceRef.current = source;
+      setAircraft([]);
+      setTotal(0);
+      setLastUpdate(null);
+      trailsRef.current.clear();
+      lastSeenRef.current.clear();
+      retryNotBefore.current = 0;
+    }
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | null = null;
     let failures = 0;
     let generation = 0;
     const paused = () => userPaused || document.hidden;
-    const schedule = (ms: number) => { timer = setTimeout(poll, ms); };
+    const schedule = (ms: number) => {
+      timer = setTimeout(poll, ms);
+    };
     async function poll() {
       if (disposed || paused()) return;
       const run = generation;
@@ -34,16 +61,31 @@ export function useAircraftFeed(settings: Settings, userPaused: boolean) {
       controller = new AbortController();
       let delay = Math.max(mode === "public" ? 5 : 1, pollIntervalSec) * 1000;
       try {
-        const query = new URLSearchParams({ mode, lat: String(homeLat), lon: String(homeLon), radius: String(radiusNm) });
-        if (mode === "local") query.set("url", localUrl);
-        const response = await fetch("/api/aircraft?" + query, { cache: "no-store", signal: controller.signal });
+        const query = new URLSearchParams({
+          mode,
+          lat: String(homeLat),
+          lon: String(homeLon),
+          radius: String(radiusNm),
+        });
+        if (mode === "local" && allowClientLocalUrl) query.set("url", localUrl);
+        const response = await fetch("/api/aircraft?" + query, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (stale()) return;
         if (response.status === 429) {
           const body = await response.json();
           if (stale()) return;
           const seconds = Number(body.retryAfter);
           const date = Date.parse(body.retryAfter);
-          delay = Math.max(30_000, Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(date) ? date - Date.now() : 30_000);
+          delay = Math.max(
+            30_000,
+            Number.isFinite(seconds)
+              ? seconds * 1000
+              : Number.isFinite(date)
+                ? date - Date.now()
+                : 30_000,
+          );
           retryNotBefore.current = Date.now() + delay;
           setStatus("rate-limited");
         } else {
@@ -77,7 +119,8 @@ export function useAircraftFeed(settings: Settings, userPaused: boolean) {
           failures = 0;
         }
       } catch (error) {
-        if (stale() || (error instanceof Error && error.name === "AbortError")) return;
+        if (stale() || (error instanceof Error && error.name === "AbortError"))
+          return;
         setStatus("error");
         delay = Math.min(60_000, 2000 * 2 ** Math.min(failures++, 5));
       } finally {
@@ -90,7 +133,10 @@ export function useAircraftFeed(settings: Settings, userPaused: boolean) {
       clearTimeout(timer);
       controller?.abort();
       if (paused()) setStatus("paused");
-      else { setStatus("connecting"); void poll(); }
+      else {
+        setStatus("connecting");
+        void poll();
+      }
     }
     restart();
     document.addEventListener("visibilitychange", restart);
@@ -100,6 +146,16 @@ export function useAircraftFeed(settings: Settings, userPaused: boolean) {
       controller?.abort();
       document.removeEventListener("visibilitychange", restart);
     };
-  }, [mode, homeLat, homeLon, radiusNm, localUrl, pollIntervalSec, userPaused]);
+  }, [
+    mode,
+    homeLat,
+    homeLon,
+    radiusNm,
+    localUrl,
+    pollIntervalSec,
+    userPaused,
+    allowClientLocalUrl,
+    source,
+  ]);
   return { aircraft, status, lastUpdate, total, trailsRef };
 }

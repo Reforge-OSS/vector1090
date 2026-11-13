@@ -11,7 +11,7 @@ services:
       PHOTO_USER_AGENT: "${PHOTO_USER_AGENT:-vector1090/1.0 (+https://github.com/Reforge-OSS/vector1090)}"
       FEED_MODE: ${FEED_MODE:-public}
       LOCAL_AIRCRAFT_URL: ${LOCAL_AIRCRAFT_URL:-http://localhost:8080/data/aircraft.json}
-      ALLOW_CLIENT_LOCAL_URL: ${ALLOW_CLIENT_LOCAL_URL:-true}
+      ALLOW_CLIENT_LOCAL_URL: ${ALLOW_CLIENT_LOCAL_URL:-false}
       HOME_LAT: ${HOME_LAT:-52.8311}
       HOME_LON: ${HOME_LON:--1.3281}
       HOME_RADIUS_NM: ${HOME_RADIUS_NM:-50}
