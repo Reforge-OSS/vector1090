@@ -26,8 +26,13 @@ export interface Settings {
   pollIntervalSec: number;
 }
 export const DEFAULT_SETTINGS: Settings = {
-  mode: "public", localUrl: "http://localhost:8080/data/aircraft.json",
-  homeLat: 52.8311, homeLon: -1.3281, radiusNm: 50, units: "aviation", pollIntervalSec: 10,
+  mode: "public",
+  localUrl: "http://localhost:8080/data/aircraft.json",
+  homeLat: 52.8311,
+  homeLon: -1.3281,
+  radiusNm: 50,
+  units: "aviation",
+  pollIntervalSec: 10,
 };
 export interface AircraftResponse {
   aircraft: Aircraft[];

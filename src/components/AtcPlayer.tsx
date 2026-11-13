@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import palette from "@/lib/palette.json";
 const streams = [
   ["JFK Tower", "https://s1-fmt2.liveatc.net/kjfk_twr"],
   ["Boston Tower", "https://s1-bos.liveatc.net/kbos_twr"],
@@ -26,24 +27,43 @@ export default function AtcPlayer() {
   useEffect(() => {
     mounted.current = true;
     try {
-      const saved = JSON.parse(localStorage.getItem("vector1090:audio") ?? "null");
+      const saved = JSON.parse(
+        localStorage.getItem("vector1090:audio") ?? "null",
+      );
       if (typeof saved?.url === "string") setUrl(saved.url);
-      if (typeof saved?.volume === "number" && Number.isFinite(saved.volume)) setVolume(Math.max(0, Math.min(1, saved.volume)));
-    } catch { /* Storage is optional. */ }
+      if (typeof saved?.volume === "number" && Number.isFinite(saved.volume))
+        setVolume(Math.max(0, Math.min(1, saved.volume)));
+    } catch {
+      /* Storage is optional. */
+    }
     setLoaded(true);
     return () => {
       mounted.current = false;
       clearTimeout(bufferingTimer.current);
-      if (audio.current) { audio.current.onerror = null; audio.current.pause(); audio.current.src = ""; }
+      if (audio.current) {
+        audio.current.onerror = null;
+        audio.current.pause();
+        audio.current.src = "";
+      }
       void context.current?.close();
     };
   }, []);
   useEffect(() => {
     if (audio.current) audio.current.volume = volume;
-    if (loaded) { try { localStorage.setItem("vector1090:audio", JSON.stringify({ url, volume })); } catch { /* Storage is optional. */ } }
+    if (loaded) {
+      try {
+        localStorage.setItem(
+          "vector1090:audio",
+          JSON.stringify({ url, volume }),
+        );
+      } catch {
+        /* Storage is optional. */
+      }
+    }
   }, [url, volume, loaded]);
   useEffect(() => {
     let frame = 0;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const data = new Uint8Array(32);
     const draw = (time: number) => {
       const ctx = canvas.current?.getContext("2d");
@@ -51,9 +71,20 @@ export default function AtcPlayer() {
         ctx.clearRect(0, 0, 112, 28);
         analyser.current?.getByteFrequencyData(data);
         for (let i = 0; i < 18; i++) {
-          const level = status === "playing" ? analyser.current ? data[i] / 255 : 0.15 + Math.abs(Math.sin(time / 280 + i * 1.7) * Math.cos(time / 710 + i)) * 0.8 : 0.06;
+          const level =
+            status === "playing"
+              ? reducedMotion.matches
+                ? 0.3
+                : analyser.current
+                  ? data[i] / 255
+                  : 0.15 +
+                    Math.abs(
+                      Math.sin(time / 280 + i * 1.7) * Math.cos(time / 710 + i),
+                    ) *
+                      0.8
+              : 0.06;
           const height = 2 + level * 24;
-          ctx.fillStyle = status === "error" ? "#f87171" : "#22d3ee";
+          ctx.fillStyle = status === "error" ? palette.rose : palette.muted;
           ctx.globalAlpha = 0.4 + level * 0.6;
           ctx.fillRect(i * 6 + 1, (28 - height) / 2, 3, height);
         }
@@ -65,7 +96,11 @@ export default function AtcPlayer() {
   }, [status]);
   function stop() {
     clearTimeout(bufferingTimer.current);
-    if (audio.current) { audio.current.onerror = null; audio.current.pause(); audio.current.src = ""; }
+    if (audio.current) {
+      audio.current.onerror = null;
+      audio.current.pause();
+      audio.current.src = "";
+    }
     audio.current = null;
     analyser.current = null;
     void context.current?.close();
@@ -73,7 +108,13 @@ export default function AtcPlayer() {
   }
   function start(withCors = true) {
     let parsed: URL;
-    try { parsed = new URL(url); if (!["http:", "https:"].includes(parsed.protocol)) throw new Error(); } catch { setStatus("error"); return; }
+    try {
+      parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    } catch {
+      setStatus("error");
+      return;
+    }
     stop();
     setStatus("buffering");
     setFallback(!withCors);
@@ -86,9 +127,17 @@ export default function AtcPlayer() {
     const fail = () => {
       if (!active()) return;
       if (withCors) start(false);
-      else { setStatus("error"); stop(); }
+      else {
+        setStatus("error");
+        stop();
+      }
     };
-    element.onplaying = () => { if (active()) { clearTimeout(bufferingTimer.current); setStatus("playing"); } };
+    element.onplaying = () => {
+      if (active()) {
+        clearTimeout(bufferingTimer.current);
+        setStatus("playing");
+      }
+    };
     element.onwaiting = () => {
       if (active()) {
         setStatus("buffering");
@@ -96,7 +145,12 @@ export default function AtcPlayer() {
         bufferingTimer.current = setTimeout(fail, 15000);
       }
     };
-    element.onended = () => { if (active()) { setStatus("paused"); stop(); } };
+    element.onended = () => {
+      if (active()) {
+        setStatus("paused");
+        stop();
+      }
+    };
     element.onerror = fail;
     bufferingTimer.current = setTimeout(fail, 15000);
     if (withCors) {
@@ -106,29 +160,118 @@ export default function AtcPlayer() {
         const source = ctx.createMediaElementSource(element);
         const node = ctx.createAnalyser();
         node.fftSize = 64;
-        source.connect(node); node.connect(ctx.destination);
+        source.connect(node);
+        node.connect(ctx.destination);
         analyser.current = node;
         void ctx.resume().catch(() => {});
-      } catch { analyser.current = null; setFallback(true); }
+      } catch {
+        analyser.current = null;
+        setFallback(true);
+      }
     }
     element.src = parsed.href;
-    void element.play().catch(error => {
+    void element.play().catch((error) => {
       if (!active()) return;
-      if (error.name === "NotAllowedError") { setStatus("error"); stop(); }
-      else if (withCors) start(false);
-      else { setStatus("error"); stop(); }
+      if (error.name === "NotAllowedError") {
+        setStatus("error");
+        stop();
+      } else if (withCors) start(false);
+      else {
+        setStatus("error");
+        stop();
+      }
     });
   }
   function toggle() {
-    if (status === "playing" || status === "buffering") { stop(); setStatus("paused"); }
-    else start();
+    if (status === "playing" || status === "buffering") {
+      stop();
+      setStatus("paused");
+    } else start();
   }
-  return <section className="glass atc-player" aria-label="ATC audio player">
-    <div className="audio-heading"><span className="status-dot bg-cyan-400" /><strong>ATC COMMS</strong><span className={"audio-status " + (status === "error" ? "text-red-400" : "text-slate-400")} role="status">{status === "error" ? "Stream unavailable" : status === "buffering" ? "Buffering…" : status === "playing" ? "Live audio" : "Standby"}{fallback && status === "playing" ? " · visualizer simulated" : ""}</span><canvas ref={canvas} width={112} height={28} aria-label="Audio visualizer" /></div>
-    <div className="audio-controls">
-      <button className="play-button" aria-label={status === "playing" || status === "buffering" ? "Pause audio" : "Play audio"} onClick={toggle}>{status === "playing" || status === "buffering" ? "Ⅱ" : "▶"}</button>
-      <div className="audio-source"><select aria-label="Example ATC stream" value={streams.some(s => s[1] === url) ? url : ""} onChange={e => { stop(); setStatus("idle"); setUrl(e.target.value); }}><option value="" disabled>Custom stream</option><optgroup label="Examples (availability may vary)">{streams.map(([name, value]) => <option key={value} value={value}>{name}</option>)}</optgroup></select><input aria-label="ATC stream URL" value={url} onChange={e => { stop(); setStatus("idle"); setUrl(e.target.value); }} placeholder="https://…/stream" /></div>
-      <label className="volume-control"><span aria-hidden>◖))</span><input aria-label="Audio volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={e => setVolume(Number(e.target.value))} /></label>
-    </div>
-  </section>;
+  return (
+    <section className="glass atc-player" aria-label="ATC audio player">
+      <div className="audio-heading">
+        <span className="status-dot bg-subtle" />
+        <strong>ATC audio</strong>
+        <span
+          className={
+            "audio-status " + (status === "error" ? "text-rose" : "text-muted")
+          }
+          role="status"
+        >
+          {status === "error"
+            ? "Stream unavailable"
+            : status === "buffering"
+              ? "Buffering…"
+              : status === "playing"
+                ? "Live audio"
+                : "Standby"}
+          {fallback && status === "playing" ? " · visualizer simulated" : ""}
+        </span>
+        <canvas
+          ref={canvas}
+          width={112}
+          height={28}
+          aria-label="Audio visualizer"
+        />
+      </div>
+      <div className="audio-controls">
+        <button
+          className="play-button"
+          aria-label={
+            status === "playing" || status === "buffering"
+              ? "Pause audio"
+              : "Play audio"
+          }
+          onClick={toggle}
+        >
+          {status === "playing" || status === "buffering" ? "Ⅱ" : "▶"}
+        </button>
+        <div className="audio-source">
+          <select
+            aria-label="Example ATC stream"
+            value={streams.some((s) => s[1] === url) ? url : ""}
+            onChange={(e) => {
+              stop();
+              setStatus("idle");
+              setUrl(e.target.value);
+            }}
+          >
+            <option value="" disabled>
+              Custom stream
+            </option>
+            <optgroup label="Examples (availability may vary)">
+              {streams.map(([name, value]) => (
+                <option key={value} value={value}>
+                  {name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          <input
+            aria-label="ATC stream URL"
+            value={url}
+            onChange={(e) => {
+              stop();
+              setStatus("idle");
+              setUrl(e.target.value);
+            }}
+            placeholder="https://…/stream"
+          />
+        </div>
+        <label className="volume-control">
+          <span aria-hidden>◖))</span>
+          <input
+            aria-label="Audio volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+          />
+        </label>
+      </div>
+    </section>
+  );
 }
