@@ -219,7 +219,7 @@ export default function Home() {
           onClose={() => setSelectedHex(null)}
         />
       )}
-      <AtcPlayer />
+      <AtcPlayer center={viewport?.center ?? null} />
       {modal && (
         <SettingsModal
           settings={settings}

@@ -148,7 +148,14 @@ image rights remain with their owners.
 Basemap: [CARTO](https://carto.com/attributions) and
 [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
 Map rendering: [MapLibre](https://maplibre.org/).
-Example audio mounts reference third-party services including
-[LiveATC.net](https://www.liveatc.net/); they are not hosted or guaranteed by this project.
+ATC audio uses your own Icecast receiver or saved stream URLs. Configure
+`ATC_ICECAST_URL` for mount discovery; optional `ATC_ICECAST_LABELS` maps mount
+paths to names or metadata (ICAO, IATA, city, country, frequency, type, lat/lon).
+`ATC_ICECAST_AIRPORT` accepts a default ICAO or a JSON mount-to-ICAO mapping.
+Airport codes group channels for automatic backup selection.
+Set `IBONAV_ATC_TOKEN` only with an authorized ATC Broadcasts Access role;
+[ibonav.aero](https://ibonav.aero) streams use a server-side proxy and require
+attribution. Discovery is cached for at least 60 seconds. No audio autoplays.
+LiveATC is a link-out only; its live streams are not embedded.
 
 MIT. See [LICENSE](LICENSE); third-party content retains its own terms.

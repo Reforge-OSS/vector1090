@@ -16,6 +16,10 @@ services:
       HOME_LAT: ${HOME_LAT:-52.8311}
       HOME_LON: ${HOME_LON:--1.3281}
       HOME_RADIUS_NM: ${HOME_RADIUS_NM:-50}
+      # ATC_ICECAST_URL: ${ATC_ICECAST_URL:-}
+      # ATC_ICECAST_AIRPORT: ${ATC_ICECAST_AIRPORT:-}
+      # ATC_ICECAST_LABELS: ${ATC_ICECAST_LABELS:-}
+      # IBONAV_ATC_TOKEN: ${IBONAV_ATC_TOKEN:-}
     # For a receiver on the Docker host, use host.docker.internal in LOCAL_RECEIVER_URL:
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"

@@ -1,71 +1,73 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useAtcChannels } from "@/hooks/useAtcChannels";
+import { useAtcAudio } from "@/hooks/useAtcAudio";
+import { providerName } from "@/lib/atc";
+import AtcPicker from "./AtcPicker";
 import palette from "@/lib/palette.json";
-const streams = [
-  ["JFK Tower", "https://s1-fmt2.liveatc.net/kjfk_twr"],
-  ["Boston Tower", "https://s1-bos.liveatc.net/kbos_twr"],
-  ["Heathrow · example", "https://s1-fmt2.liveatc.net/egll_twr"],
-  ["Amsterdam · example", "https://s1-fmt2.liveatc.net/eham_twr"],
-  ["Los Angeles · example", "https://s1-fmt2.liveatc.net/klax_twr"],
-  ["San Francisco · example", "https://s1-fmt2.liveatc.net/ksfo_twr"],
-];
-type AudioStatus = "idle" | "buffering" | "playing" | "paused" | "error";
-export default function AtcPlayer() {
-  const [url, setUrl] = useState(streams[0][1]);
-  const [volume, setVolume] = useState(0.6);
-  const [loaded, setLoaded] = useState(false);
-  const [status, setStatus] = useState<AudioStatus>("idle");
-  const [fallback, setFallback] = useState(false);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const context = useRef<AudioContext | null>(null);
-  const analyser = useRef<AnalyserNode | null>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const mounted = useRef(true);
-  const bufferingTimer = useRef<ReturnType<typeof setTimeout>>();
-  const currentVolume = useRef(volume);
-  currentVolume.current = volume;
+export default function AtcPlayer({
+  center = null,
+}: {
+  center?: { lat: number; lon: number } | null;
+}) {
+  const { channels, saved, configured, error, ready, save, remove } =
+    useAtcChannels();
+  const [volume, setVolume] = useState(0.6),
+    [loaded, setLoaded] = useState(false);
+  const { current, status, note, meterAvailable, analyser, select, toggle } =
+    useAtcAudio(channels, volume);
+  const canvas = useRef<HTMLCanvasElement>(null),
+    panel = useRef<HTMLElement>(null),
+    savedId = useRef<string | null>(null);
   useEffect(() => {
-    mounted.current = true;
     try {
-      const saved = JSON.parse(
+      const data = JSON.parse(
         localStorage.getItem("vector1090:audio") ?? "null",
       );
-      if (typeof saved?.url === "string") setUrl(saved.url);
-      if (typeof saved?.volume === "number" && Number.isFinite(saved.volume))
-        setVolume(Math.max(0, Math.min(1, saved.volume)));
-    } catch {
-      /* Storage is optional. */
-    }
+      savedId.current = typeof data?.id === "string" ? data.id : null;
+      if (typeof data?.volume === "number" && Number.isFinite(data.volume))
+        setVolume(Math.max(0, Math.min(1, data.volume)));
+    } catch {}
     setLoaded(true);
-    return () => {
-      mounted.current = false;
-      clearTimeout(bufferingTimer.current);
-      if (audio.current) {
-        audio.current.onerror = null;
-        audio.current.pause();
-        audio.current.src = "";
-      }
-      void context.current?.close();
-    };
   }, []);
   useEffect(() => {
-    if (audio.current) audio.current.volume = volume;
-    if (loaded) {
+    if (ready && !current && channels.length)
+      select(
+        channels.find((c) => c.id === savedId.current) ??
+          channels.find((c) => c.provider === "icecast" && c.online) ??
+          channels.find((c) => c.online) ??
+          channels[0],
+      );
+  }, [channels, current, ready, select]);
+  useEffect(() => {
+    if (loaded)
       try {
         localStorage.setItem(
           "vector1090:audio",
-          JSON.stringify({ url, volume }),
+          JSON.stringify({ id: current?.id, volume }),
         );
-      } catch {
-        /* Storage is optional. */
-      }
-    }
-  }, [url, volume, loaded]);
+      } catch {}
+  }, [current, volume, loaded]);
+  useEffect(() => {
+    if (!panel.current || !globalThis.ResizeObserver) return;
+    const dashboard = panel.current.closest<HTMLElement>(".dashboard");
+    const observer = new ResizeObserver(() =>
+      dashboard?.style.setProperty(
+        "--audio-clearance",
+        Math.ceil(panel.current!.getBoundingClientRect().height + 54) + "px",
+      ),
+    );
+    observer.observe(panel.current);
+    return () => {
+      observer.disconnect();
+      dashboard?.style.removeProperty("--audio-clearance");
+    };
+  }, []);
   useEffect(() => {
     let frame = 0;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const data = new Uint8Array(32);
-    const draw = (time: number) => {
+    const draw = () => {
       const ctx = canvas.current?.getContext("2d");
       if (ctx) {
         ctx.clearRect(0, 0, 112, 28);
@@ -73,15 +75,11 @@ export default function AtcPlayer() {
         for (let i = 0; i < 18; i++) {
           const level =
             status === "playing"
-              ? reducedMotion.matches
+              ? reduced.matches
                 ? 0.3
                 : analyser.current
                   ? data[i] / 255
-                  : 0.15 +
-                    Math.abs(
-                      Math.sin(time / 280 + i * 1.7) * Math.cos(time / 710 + i),
-                    ) *
-                      0.8
+                  : 0.1
               : 0.06;
           const height = 2 + level * 24;
           ctx.fillStyle = status === "error" ? palette.rose : palette.muted;
@@ -93,120 +91,25 @@ export default function AtcPlayer() {
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [status]);
-  function stop() {
-    clearTimeout(bufferingTimer.current);
-    if (audio.current) {
-      audio.current.onerror = null;
-      audio.current.pause();
-      audio.current.src = "";
-    }
-    audio.current = null;
-    analyser.current = null;
-    void context.current?.close();
-    context.current = null;
-  }
-  function start(withCors = true) {
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
-    } catch {
-      setStatus("error");
-      return;
-    }
-    stop();
-    setStatus("buffering");
-    setFallback(!withCors);
-    const element = new Audio();
-    if (withCors) element.crossOrigin = "anonymous";
-    element.preload = "none";
-    element.volume = currentVolume.current;
-    audio.current = element;
-    const active = () => mounted.current && audio.current === element;
-    const fail = () => {
-      if (!active()) return;
-      if (withCors) start(false);
-      else {
-        setStatus("error");
-        stop();
-      }
-    };
-    element.onplaying = () => {
-      if (active()) {
-        clearTimeout(bufferingTimer.current);
-        setStatus("playing");
-      }
-    };
-    element.onwaiting = () => {
-      if (active()) {
-        setStatus("buffering");
-        clearTimeout(bufferingTimer.current);
-        bufferingTimer.current = setTimeout(fail, 15000);
-      }
-    };
-    element.onended = () => {
-      if (active()) {
-        setStatus("paused");
-        stop();
-      }
-    };
-    element.onerror = fail;
-    bufferingTimer.current = setTimeout(fail, 15000);
-    if (withCors) {
-      try {
-        const ctx = new AudioContext();
-        context.current = ctx;
-        const source = ctx.createMediaElementSource(element);
-        const node = ctx.createAnalyser();
-        node.fftSize = 64;
-        source.connect(node);
-        node.connect(ctx.destination);
-        analyser.current = node;
-        void ctx.resume().catch(() => {});
-      } catch {
-        analyser.current = null;
-        setFallback(true);
-      }
-    }
-    element.src = parsed.href;
-    void element.play().catch((error) => {
-      if (!active()) return;
-      if (error.name === "NotAllowedError") {
-        setStatus("error");
-        stop();
-      } else if (withCors) start(false);
-      else {
-        setStatus("error");
-        stop();
-      }
-    });
-  }
-  function toggle() {
-    if (status === "playing" || status === "buffering") {
-      stop();
-      setStatus("paused");
-    } else start();
-  }
+  }, [status, analyser]);
   return (
-    <section className="glass atc-player" aria-label="ATC audio player">
+    <section
+      className="glass atc-player"
+      aria-label="ATC audio player"
+      ref={panel}
+    >
       <div className="audio-heading">
-        <span className="status-dot bg-subtle" />
         <strong>ATC audio</strong>
-        <span
-          className={
-            "audio-status " + (status === "error" ? "text-rose" : "text-muted")
-          }
-          role="status"
-        >
+        <span className="audio-status" role="status">
           {status === "error"
-            ? "Stream unavailable"
+            ? "Unavailable"
             : status === "buffering"
-              ? "Buffering…"
+              ? "Connecting…"
               : status === "playing"
                 ? "Live audio"
-                : "Standby"}
-          {fallback && status === "playing" ? " · visualizer simulated" : ""}
+                : status === "paused"
+                  ? "Paused"
+                  : "Standby"}
         </span>
         <canvas
           ref={canvas}
@@ -218,6 +121,7 @@ export default function AtcPlayer() {
       <div className="audio-controls">
         <button
           className="play-button"
+          disabled={!current}
           aria-label={
             status === "playing" || status === "buffering"
               ? "Pause audio"
@@ -228,36 +132,33 @@ export default function AtcPlayer() {
           {status === "playing" || status === "buffering" ? "Ⅱ" : "▶"}
         </button>
         <div className="audio-source">
-          <select
-            aria-label="Example ATC stream"
-            value={streams.some((s) => s[1] === url) ? url : ""}
-            onChange={(e) => {
-              stop();
-              setStatus("idle");
-              setUrl(e.target.value);
+          <AtcPicker
+            channels={channels}
+            current={current}
+            center={center}
+            saved={saved}
+            onSelect={select}
+            onSave={save}
+            onRemove={(id) => {
+              if (current?.id === id) select(null);
+              remove(id);
             }}
-          >
-            <option value="" disabled>
-              Custom stream
-            </option>
-            <optgroup label="Examples (availability may vary)">
-              {streams.map(([name, value]) => (
-                <option key={value} value={value}>
-                  {name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-          <input
-            aria-label="ATC stream URL"
-            value={url}
-            onChange={(e) => {
-              stop();
-              setStatus("idle");
-              setUrl(e.target.value);
-            }}
-            placeholder="https://…/stream"
           />
+          {current && (
+            <small className="atc-provider">
+              {current.provider === "ibonav" ? (
+                <a href="https://ibonav.aero" target="_blank" rel="noreferrer">
+                  ibonav.aero
+                </a>
+              ) : (
+                providerName(current.provider)
+              )}
+              {current.frequency ? " · " + current.frequency : ""}
+              {status === "playing" && !meterAvailable
+                ? " · meter unavailable"
+                : ""}
+            </small>
+          )}
         </div>
         <label className="volume-control">
           <span aria-hidden>◖))</span>
@@ -266,12 +167,40 @@ export default function AtcPlayer() {
             type="range"
             min="0"
             max="1"
-            step="0.01"
+            step=".01"
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
           />
         </label>
       </div>
+      {!channels.length && (
+        <p className="atc-message">
+          {!ready
+            ? "Loading receivers…"
+            : error ||
+              (configured
+                ? "No receiver mounts found. Paste a stream URL to add a channel."
+                : "Add your own receiver with ATC_ICECAST_URL or paste a stream URL")}
+        </p>
+      )}
+      {note && (
+        <p className="atc-message" role="status">
+          {note}
+        </p>
+      )}
+      {status === "error" && (
+        <a
+          className="atc-link"
+          href={
+            "https://www.liveatc.net/search/?icao=" +
+            encodeURIComponent(current?.airportIcao ?? "")
+          }
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open on LiveATC ↗
+        </a>
+      )}
     </section>
   );
 }

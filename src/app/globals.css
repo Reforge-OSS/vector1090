@@ -307,7 +307,7 @@ kbd {
   position: absolute;
   left: 20px;
   top: 104px;
-  bottom: 154px;
+  bottom: var(--audio-clearance, 154px);
   width: 308px;
   border-radius: 8px;
   display: flex;
@@ -863,21 +863,185 @@ kbd {
   flex: 1;
   min-width: 0;
 }
-.audio-source select {
+.atc-picker {
+  position: relative;
+}
+.atc-player:has(.atc-popover) {
+  z-index: 35;
+}
+.atc-channel-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   border: 0;
-  padding: 0;
+  padding: 4px 0;
   background: transparent;
+  text-align: left;
   font-size: 11px;
 }
-.audio-source input {
+.atc-channel-trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.atc-provider {
   display: block;
-  width: 100%;
-  border: 0;
-  padding: 6px 0 0;
-  background: transparent;
-  font-size: 8px;
+  font-size: 9px;
   color: var(--subtle);
+}
+.atc-provider a,
+.atc-attribution,
+.atc-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.atc-message {
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 10px 0 0;
+}
+.atc-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.atc-popover {
+  position: absolute;
+  bottom: calc(100% + 20px);
+  left: -52px;
+  width: min(400px, calc(100vw - 40px));
+  max-height: min(60dvh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 14px;
+  z-index: 30;
+}
+.atc-popover input,
+.atc-popover select {
+  width: 100%;
+  min-width: 0;
+  font-size: 11px;
+  padding: 9px;
+}
+.atc-sort {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+.atc-sort select {
+  flex: 1;
+}
+.atc-results {
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.atc-group {
+  font-size: 9px;
+  color: var(--subtle);
+  padding: 12px 4px 6px;
+}
+.atc-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 10px 7px;
+  gap: 9px;
+}
+.atc-option.is-focused,
+.atc-option[aria-selected="true"] {
+  background: var(--hover);
+}
+.atc-option b {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+}
+.atc-option small {
+  display: block;
+  color: var(--subtle);
+  font-size: 9px;
+  margin-top: 4px;
+}
+.atc-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--subtle);
+  flex-shrink: 0;
+}
+.atc-dot.is-online {
+  background: var(--sage);
+}
+.atc-dot.is-unverified {
+  background: transparent;
+  border: 1px solid var(--muted);
+}
+.atc-muted {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 12px 0;
+}
+.atc-attribution {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  margin: 10px 0;
+}
+.atc-custom {
+  border-top: 1px solid var(--hairline);
+  margin-top: 12px;
+  padding-top: 12px;
+  font-size: 11px;
+}
+.atc-custom summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.atc-custom form {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+.atc-custom form > div {
+  display: flex;
+  gap: 8px;
+}
+.atc-custom form p {
+  color: var(--rose);
+  line-height: 1.5;
+}
+.atc-saved {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 8px;
+  font-size: 10px;
+}
+.atc-saved button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+}
+.play-button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .volume-control {
   width: 78px;
@@ -1093,12 +1257,12 @@ kbd {
   .sidebar {
     top: 80px;
     left: 8px;
-    bottom: 150px;
+    bottom: var(--audio-clearance, 150px);
     width: min(308px, calc(100% - 16px));
   }
   .inspector {
     top: 80px;
-    bottom: 150px;
+    bottom: var(--audio-clearance, 150px);
     right: 8px;
     width: min(336px, calc(100% - 16px));
     z-index: 16;
