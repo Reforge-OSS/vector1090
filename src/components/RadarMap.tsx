@@ -5,9 +5,16 @@ import {
   setWorkerUrl,
   type GeoJSONSource,
   type Map as Radar,
+  type RasterTileSource,
 } from "maplibre-gl";
 import type { FeatureCollection, Feature, Point, LineString } from "geojson";
-import type { Aircraft, MapViewport, Settings } from "@/lib/types";
+import type {
+  Aircraft,
+  MapViewport,
+  Settings,
+  LayerSettings,
+  FeedMode,
+} from "@/lib/types";
 import type { Trails } from "@/hooks/useAircraftFeed";
 import {
   altitudeColor,
@@ -18,6 +25,19 @@ import {
 import { circlePolygon, deadReckon, destinationPoint } from "@/lib/geo";
 import palette from "@/lib/palette.json";
 import { viewportRadius } from "@/lib/feeds";
+import type { FlightRoute } from "@/lib/intelligence";
+import type { MapCamera } from "@/lib/mapState";
+import { aircraftPaths } from "@/lib/aircraftIcons";
+import { addMapLayers } from "@/lib/mapLayers";
+import {
+  nightPolygon,
+  receiverRangeLine,
+  routeFeatures,
+  trailGradient,
+  unwrapLine,
+  aircraftPosition,
+} from "@/lib/mapGeometry";
+import { useWeatherRadar } from "@/hooks/useWeatherRadar";
 
 interface Props {
   aircraft: Aircraft[];
@@ -26,29 +46,21 @@ interface Props {
   home: { lat: number; lon: number };
   selectedHex: string | null;
   onSelect: (hex: string | null) => void;
-  showAllTrails: boolean;
+  layers: LayerSettings;
+  mode: FeedMode;
+  initialCamera: MapCamera | null;
+  selectedAircraft: Aircraft | null;
+  selectedLastUpdate: number | null;
+  selectedRoute: FlightRoute | null;
+  receiverSectors: number[];
   units: Settings["units"];
   onViewportChange: (viewport: MapViewport) => void;
   watchlist: ReadonlySet<string>;
 }
-const paths = {
-  jet: "M32 3 Q35 3 35 12 L35 25 L56 40 L56 45 L35 37 L35 52 L43 58 L43 61 L32 57 L21 61 L21 58 L29 52 L29 37 L8 45 L8 40 L29 25 L29 12 Q29 3 32 3Z",
-  heavy:
-    "M32 2 Q36 2 36 12 L36 26 L61 38 L61 44 L36 37 L36 53 L46 58 L46 62 L32 58 L18 62 L18 58 L28 53 L28 37 L3 44 L3 38 L28 26 L28 12 Q28 2 32 2Z M10 35 H14 V46 H10Z M20 30 H24 V42 H20Z M40 30 H44 V42 H40Z M50 35 H54 V46 H50Z",
-  light:
-    "M30 8 H34 V22 L57 27 V33 L34 31 V51 L43 55 V59 L32 57 L21 59 V55 L30 51 V31 L7 33 V27 L30 22Z M18 5 H46 V8 H18Z M31 3 H33 V14 H31Z",
-  helicopter:
-    "M32 17 Q40 17 40 30 Q40 38 35 40 L34 54 L44 57 V60 H20 V57 L30 54 L29 40 Q24 38 24 30 Q24 17 32 17Z M9 29 H55 V32 H9Z M31 6 H34 V52 H31Z M10 13 L52 49 L54 46 L12 10Z M11 48 L53 12 L51 9 L9 45Z",
-  military:
-    "M32 2 L37 24 L59 48 L59 53 L38 45 L39 54 L46 61 L32 57 L18 61 L25 54 L26 45 L5 53 L5 48 L27 24Z",
-};
-async function silhouette(path: string, rotor: boolean): Promise<ImageData> {
+async function silhouette(path: string): Promise<ImageData> {
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64">' +
-    (rotor
-      ? '<circle cx="32" cy="30" r="25" fill="none" stroke="white" stroke-width="1.5"/>'
-      : "") +
-    '<path fill="white" d="' +
+    '<path fill="white" stroke="white" stroke-width="0.7" stroke-linejoin="round" d="' +
     path +
     '"/></svg>';
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
@@ -77,6 +89,9 @@ export default function RadarMap(props: Props) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previousHome = useRef(props.home);
+  const previousCamera = useRef(props.initialCamera);
+  const focusedSelection = useRef<string | null>(null);
+  const weather = useWeatherRadar(props.layers.weatherRadar);
   useEffect(() => {
     if (!container.current) return;
     let disposed = false;
@@ -87,8 +102,11 @@ export default function RadarMap(props: Props) {
     const map = new MapLibreMap({
       container: container.current,
       style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-      center: [initial.home.lon, initial.home.lat],
-      zoom: 8,
+      center: [
+        initial.initialCamera?.lon ?? initial.home.lon,
+        initial.initialCamera?.lat ?? initial.home.lat,
+      ],
+      zoom: initial.initialCamera?.zoom ?? 8,
       pitchWithRotate: false,
       dragRotate: false,
       touchPitch: false,
@@ -129,9 +147,8 @@ export default function RadarMap(props: Props) {
           map.setPaintProperty(layer.id, "line-opacity", 0.6);
       }
       const icons = await Promise.all(
-        Object.entries(paths).map(
-          async ([name, path]) =>
-            [name, await silhouette(path, name === "helicopter")] as const,
+        Object.entries(aircraftPaths).map(
+          async ([name, path]) => [name, await silhouette(path)] as const,
         ),
       );
       if (disposed) return;
@@ -139,6 +156,7 @@ export default function RadarMap(props: Props) {
         map.addImage(name, data, { sdf: true, pixelRatio: 2 });
       for (const id of ["aircraft", "trails", "rings", "ring-labels", "home"])
         map.addSource(id, { type: "geojson", data: collection() });
+      addMapLayers(map);
       map.addLayer({
         id: "rings",
         type: "line",
@@ -229,12 +247,60 @@ export default function RadarMap(props: Props) {
         },
       });
       map.addLayer({
+        id: "ground-aircraft",
+        type: "symbol",
+        source: "aircraft",
+        filter: ["==", ["get", "ground"], true],
+        layout: {
+          "icon-image": ["get", "kind"],
+          "icon-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            4,
+            0.3,
+            10,
+            0.42,
+            15,
+            0.55,
+          ],
+          "icon-rotate": ["get", "track"],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": false,
+          "icon-padding": 2,
+          "symbol-sort-key": [
+            "case",
+            ["get", "selected"],
+            -2,
+            ["get", "watched"],
+            -1,
+            0,
+          ],
+        },
+        paint: {
+          "icon-color": ["get", "color"],
+          "icon-halo-color": palette.canvas,
+          "icon-halo-width": 1,
+        },
+      });
+      map.addLayer({
         id: "aircraft",
         type: "symbol",
         source: "aircraft",
+        filter: ["!=", ["get", "ground"], true],
         layout: {
           "icon-image": ["get", "kind"],
-          "icon-size": 0.48,
+          "icon-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            4,
+            0.32,
+            10,
+            0.48,
+            15,
+            0.6,
+          ],
           "icon-rotate": ["get", "track"],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
@@ -253,14 +319,32 @@ export default function RadarMap(props: Props) {
           "text-field": [
             "step",
             ["zoom"],
-            ["case", ["get", "selected"], ["get", "label"], ""],
-            8,
+            [
+              "case",
+              ["all", ["get", "selected"], ["!", ["get", "ground"]]],
+              ["get", "label"],
+              "",
+            ],
+            7,
+            ["case", ["get", "ground"], "", ["get", "label"]],
+            13,
             ["get", "label"],
           ],
           "text-font": ["Open Sans Regular"],
           "text-size": 10,
           "text-anchor": "top",
           "text-offset": [0, 1.8],
+          "text-allow-overlap": false,
+          "text-ignore-placement": false,
+          "text-padding": 4,
+          "symbol-sort-key": [
+            "case",
+            ["get", "selected"],
+            -2,
+            ["get", "ground"],
+            1,
+            0,
+          ],
         },
         paint: {
           "text-color": palette.muted,
@@ -270,16 +354,20 @@ export default function RadarMap(props: Props) {
       });
       map.on("click", (event) => {
         const hit = map.queryRenderedFeatures(event.point, {
-          layers: ["aircraft"],
+          layers: ["aircraft", "ground-aircraft"],
         })[0];
         latest.current.onSelect(hit ? String(hit.properties.hex) : null);
       });
-      map.on("mouseenter", "aircraft", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "aircraft", () => {
-        map.getCanvas().style.cursor = "";
-      });
+      map.moveLayer("route-airports");
+      map.moveLayer("route-airport-labels");
+      for (const layer of ["aircraft", "ground-aircraft"]) {
+        map.on("mouseenter", layer, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", layer, () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
       const aircraftData: FeatureCollection<Point> = {
         type: "FeatureCollection",
         features: [],
@@ -290,6 +378,7 @@ export default function RadarMap(props: Props) {
       };
       const featureCache = new Map<string, Feature<Point>>();
       let trailTick = 0;
+      let routeTick = 0;
       function animate() {
         if (disposed) return;
         const current = latest.current,
@@ -334,11 +423,14 @@ export default function RadarMap(props: Props) {
             selected: ac.hex === current.selectedHex,
             watched: current.watchlist.has(ac.hex),
             emergency: isEmergency(ac.squawk),
+            ground:
+              ac.alt_baro === "ground" || ac.category?.startsWith("C") === true,
           });
           aircraftData.features.push(feature);
           if (
             rebuildTrails &&
-            (current.showAllTrails || ac.hex === current.selectedHex)
+            current.layers.allTrails &&
+            ac.hex !== current.selectedHex
           ) {
             const points = current.trailsRef.current.get(ac.hex) ?? [];
             for (let i = 0; i < points.length; i++) {
@@ -363,7 +455,53 @@ export default function RadarMap(props: Props) {
         (map.getSource("aircraft") as GeoJSONSource).setData(aircraftData);
         if (rebuildTrails) {
           (map.getSource("trails") as GeoJSONSource).setData(trailData);
+          const selected = current.selectedAircraft;
+          const selectedPosition = selected
+            ? aircraftPosition(selected, current.selectedLastUpdate, now)
+            : null;
+          const points =
+            selected && selectedPosition
+              ? [
+                  ...(current.trailsRef.current.get(selected.hex) ?? []),
+                  {
+                    lat: selectedPosition[1],
+                    lon: selectedPosition[0],
+                    alt: selected.alt_baro,
+                    time: now,
+                  },
+                ]
+              : [];
+          (map.getSource("selected-trail") as GeoJSONSource).setData(
+            points.length >= 2
+              ? {
+                  type: "Feature",
+                  properties: {},
+                  geometry: {
+                    type: "LineString",
+                    coordinates: unwrapLine(
+                      points.map((point) => [point.lon, point.lat]),
+                    ),
+                  },
+                }
+              : collection(),
+          );
+          map.setPaintProperty(
+            "selected-trail",
+            "line-gradient",
+            trailGradient(points),
+          );
           trailTick = now;
+        }
+        if (now - routeTick > 1000) {
+          const ac = current.selectedAircraft;
+          const point = ac
+            ? aircraftPosition(ac, current.selectedLastUpdate, now)
+            : null;
+          const position = point ? { lon: point[0], lat: point[1] } : null;
+          (map.getSource("route") as GeoJSONSource).setData(
+            routeFeatures(current.selectedRoute, position),
+          );
+          routeTick = now;
         }
         const pulse = reducedMotion.matches
           ? 0
@@ -431,20 +569,118 @@ export default function RadarMap(props: Props) {
   }, [ready, props.home.lat, props.home.lon, props.units]);
   useEffect(() => {
     const map = mapRef.current;
-    const ac = latest.current.aircraft.find(
-      (ac) => ac.hex === props.selectedHex,
-    );
+    if (focusedSelection.current !== props.selectedHex)
+      focusedSelection.current = null;
+    const ac = props.selectedAircraft;
     if (
       ready &&
       map &&
       ac &&
       ac.lat !== null &&
       ac.lon !== null &&
+      focusedSelection.current !== props.selectedHex &&
       !map.getBounds().contains([ac.lon, ac.lat])
     ) {
       map.easeTo({ center: [ac.lon, ac.lat], duration: 800 });
     }
-  }, [props.selectedHex, ready]);
+    if (ac && ready) focusedSelection.current = props.selectedHex;
+  }, [props.selectedHex, props.selectedAircraft, ready]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (
+      ready &&
+      map &&
+      props.initialCamera &&
+      previousCamera.current !== props.initialCamera
+    ) {
+      map.jumpTo({
+        center: [props.initialCamera.lon, props.initialCamera.lat],
+        zoom: props.initialCamera.zoom,
+      });
+      previousCamera.current = props.initialCamera;
+    }
+  }, [ready, props.initialCamera]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const id of ["rings", "ring-labels"])
+      map.setLayoutProperty(
+        id,
+        "visibility",
+        props.layers.rangeRings ? "visible" : "none",
+      );
+    map.setLayoutProperty(
+      "terminator",
+      "visibility",
+      props.layers.terminator ? "visible" : "none",
+    );
+    map.setLayoutProperty(
+      "receiver-range",
+      "visibility",
+      props.layers.receiverRange && props.mode !== "public"
+        ? "visible"
+        : "none",
+    );
+    if (map.getLayer("weather"))
+      map.setLayoutProperty(
+        "weather",
+        "visibility",
+        props.layers.weatherRadar ? "visible" : "none",
+      );
+  }, [ready, props.layers, props.mode]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !props.layers.terminator) return;
+    const refresh = () =>
+      (map.getSource("terminator") as GeoJSONSource).setData(
+        nightPolygon(new Date()),
+      );
+    refresh();
+    const timer = setInterval(refresh, 60_000);
+    return () => clearInterval(timer);
+  }, [ready, props.layers.terminator]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const coordinates = receiverRangeLine(
+      { lat: props.home.lat, lon: props.home.lon },
+      props.receiverSectors,
+    );
+    (map.getSource("receiver-range") as GeoJSONSource).setData(
+      coordinates.length
+        ? {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates },
+          }
+        : collection(),
+    );
+  }, [ready, props.home.lat, props.home.lon, props.receiverSectors]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !weather.tiles || !props.layers.weatherRadar) return;
+    const source = map.getSource("weather") as RasterTileSource | undefined;
+    if (source) source.setTiles([weather.tiles]);
+    else {
+      map.addSource("weather", {
+        type: "raster",
+        tiles: [weather.tiles],
+        tileSize: 256,
+        maxzoom: 7,
+        attribution:
+          '<a href="https://www.rainviewer.com" target="_blank" rel="noreferrer">RainViewer</a>',
+      });
+      map.addLayer(
+        {
+          id: "weather",
+          type: "raster",
+          source: "weather",
+          paint: { "raster-opacity": 0.35, "raster-fade-duration": 350 },
+        },
+        "terminator",
+      );
+    }
+  }, [ready, weather.tiles, props.layers.weatherRadar]);
   return (
     <>
       <div
@@ -452,9 +688,9 @@ export default function RadarMap(props: Props) {
         className="absolute inset-0"
         aria-label="Live aircraft radar map"
       />
-      {error && (
+      {(error || (weather.error && props.layers.weatherRadar)) && (
         <div className="absolute bottom-8 left-3 text-xs text-sand">
-          {error}
+          {error ?? "Weather radar unavailable"}
         </div>
       )}
     </>

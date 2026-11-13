@@ -5,6 +5,16 @@ import { DEFAULT_SETTINGS, type Settings } from "@/lib/types";
 const KEY = "vector1090:settings";
 export function sanitizeSettings(input: Partial<Settings>): Settings {
   const merged = { ...DEFAULT_SETTINGS, ...input };
+  const layers =
+    input.layers && typeof input.layers === "object"
+      ? input.layers
+      : DEFAULT_SETTINGS.layers;
+  merged.layers = { ...DEFAULT_SETTINGS.layers };
+  for (const key of Object.keys(
+    DEFAULT_SETTINGS.layers,
+  ) as (keyof Settings["layers"])[]) {
+    if (typeof layers[key] === "boolean") merged.layers[key] = layers[key];
+  }
   merged.mode =
     merged.mode === "local" || merged.mode === "hybrid"
       ? merged.mode
@@ -54,18 +64,24 @@ export function useSettings() {
       }
     }
   }, [settings, loaded]);
-  const setSettings = useCallback((patch: Partial<Settings>) => {
-    setState((previous) =>
-      sanitizeSettings({
-        ...previous,
-        ...patch,
-        ...(patch.mode &&
-        patch.mode !== previous.mode &&
-        patch.pollIntervalSec === undefined
-          ? { pollIntervalSec: patch.mode === "local" ? 2 : 10 }
-          : {}),
-      }),
-    );
-  }, []);
+  const setSettings = useCallback(
+    (
+      update: Partial<Settings> | ((previous: Settings) => Partial<Settings>),
+    ) => {
+      setState((previous) => {
+        const patch = typeof update === "function" ? update(previous) : update;
+        return sanitizeSettings({
+          ...previous,
+          ...patch,
+          ...(patch.mode &&
+          patch.mode !== previous.mode &&
+          patch.pollIntervalSec === undefined
+            ? { pollIntervalSec: patch.mode === "local" ? 2 : 10 }
+            : {}),
+        });
+      });
+    },
+    [],
+  );
   return { settings, setSettings, loaded };
 }

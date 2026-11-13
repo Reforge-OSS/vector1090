@@ -59,6 +59,7 @@ export type PublicQuery =
   | { scope: "global" }
   | { scope: "area"; lat: number; lon: number; radius: number };
 export interface Settings {
+  layers: LayerSettings;
   mode: FeedMode;
   localUrl: string;
   homeLat: number;
@@ -68,7 +69,21 @@ export interface Settings {
   pollIntervalSec: number;
   trackViewport: boolean;
 }
+export interface LayerSettings {
+  rangeRings: boolean;
+  allTrails: boolean;
+  terminator: boolean;
+  weatherRadar: boolean;
+  receiverRange: boolean;
+}
 export const DEFAULT_SETTINGS: Settings = {
+  layers: {
+    rangeRings: true,
+    allTrails: false,
+    terminator: false,
+    weatherRadar: false,
+    receiverRange: false,
+  },
   mode: "public",
   localUrl: "http://localhost:8080/data/aircraft.json",
   homeLat: 52.8311,

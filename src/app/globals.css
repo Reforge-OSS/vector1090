@@ -81,13 +81,162 @@ kbd {
   letter-spacing: -0.7px;
   white-space: nowrap;
 }
-.mode-chip {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 6px 9px;
+.hud-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.hud-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.hud-action svg {
+  flex-shrink: 0;
+}
+.hud-popover-anchor {
+  position: relative;
+}
+.hud-popover {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: 0;
+  width: 256px;
+  background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: 4px;
+  border-radius: 7px;
+  padding: 16px;
+  color: var(--primary);
+}
+.hud-popover h3 {
+  font-size: 11px;
+  margin-bottom: 14px;
+  color: var(--muted);
+}
+.layer-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.layer-option input {
+  accent-color: var(--muted);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.layer-option:has(input:disabled) {
+  color: var(--subtle);
+  cursor: default;
+}
+.range-reset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 10px;
+  padding-top: 12px;
+}
+.range-reset small,
+.weather-credit {
+  font-size: 9px;
+  color: var(--subtle);
+}
+.range-reset button {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+}
+.range-reset button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.weather-credit {
+  display: block;
+  margin-top: 14px;
+}
+.weather-credit a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.overhead-button {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.overhead-button b {
+  font: 11px var(--mono);
+}
+.overhead-popover {
+  left: 0;
+  right: auto;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.overhead-popover button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 4px;
+  font-size: 11px;
+  border-top: 1px solid var(--hairline);
+  text-align: left;
+}
+.overhead-popover button:hover {
+  background: var(--hover);
+}
+.overhead-popover small {
+  font: 9px var(--mono);
+  color: var(--subtle);
+}
+.emergency-strip {
+  position: absolute;
+  top: 96px;
+  left: 20px;
+  right: 20px;
+  height: 38px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  overflow-x: auto;
   white-space: nowrap;
+  color: var(--sand);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  font-size: 11px;
+}
+.emergency-strip > span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.emergency-strip > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.emergency-strip b {
+  font: 11px var(--mono);
+  margin-left: 6px;
+}
+.emergency-strip button:last-child {
+  color: var(--muted);
+  font-size: 15px;
+}
+.has-alert .sidebar,
+.has-alert .inspector {
+  top: 146px;
 }
 .status-dot {
   display: inline-block;
@@ -853,9 +1002,6 @@ kbd {
   .hud-count {
     padding-left: 16px;
   }
-  .mode-chip {
-    display: none;
-  }
   .sidebar {
     width: 280px;
   }
@@ -886,7 +1032,8 @@ kbd {
   .hud-status,
   .hud-count small,
   .settings-label,
-  .trails-control span {
+  .layers-label,
+  .pause-label {
     display: none;
   }
   .hud-count {
@@ -902,6 +1049,46 @@ kbd {
   }
   .hud .ml-auto {
     gap: 5px;
+  }
+  .hud {
+    gap: 8px;
+  }
+  .overhead-anchor {
+    position: static;
+  }
+  .overhead-button {
+    padding: 7px;
+    font-size: 9px;
+    gap: 4px;
+  }
+  .overhead-label {
+    display: none;
+  }
+  .hud:has(.overhead-anchor) .hud-count {
+    display: none;
+  }
+  .overhead-popover {
+    left: auto;
+    right: 0;
+    top: calc(100% + 6px);
+  }
+  .hud-popover {
+    position: fixed;
+    top: 78px;
+    right: 8px;
+    max-width: calc(100vw - 16px);
+  }
+  .hud-action {
+    min-height: 32px;
+  }
+  .emergency-strip {
+    top: 78px;
+    left: 8px;
+    right: 8px;
+  }
+  .has-alert .sidebar,
+  .has-alert .inspector {
+    top: 124px;
   }
   .sidebar {
     top: 80px;
