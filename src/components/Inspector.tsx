@@ -1,6 +1,4 @@
 "use client";
-import { useEffect, useState } from "react";
-import Image from "next/image";
 import type { Aircraft, Settings } from "@/lib/types";
 import { aircraftDistance } from "@/lib/filters";
 import { altitudeColor, isEmergency } from "@/lib/aircraftStyle";
@@ -10,14 +8,11 @@ import {
   formatSpeed,
   formatVerticalRate,
 } from "@/lib/units";
-import { loadPhoto } from "@/lib/photos";
+import type { FlightRoute } from "@/lib/intelligence";
+import type { HistoryPoint } from "@/hooks/useAircraftFeed";
+import PhotoCarousel from "./PhotoCarousel";
+import AircraftDetails from "./AircraftDetails";
 import ScrollPanel from "./ScrollPanel";
-interface Photo {
-  thumbnail: string;
-  large: string;
-  link: string;
-  photographer: string;
-}
 const emergencyMeaning: Record<string, string> = {
   "7500": "Hijack",
   "7600": "Radio Failure",
@@ -28,30 +23,22 @@ export default function Inspector({
   aircraft,
   settings,
   onClose,
+  watched,
+  onToggleWatch,
+  route,
+  routeLoading,
+  history,
 }: {
   hex: string;
   aircraft: Aircraft | undefined;
   settings: Settings;
   onClose: () => void;
+  watched: boolean;
+  onToggleWatch: () => void;
+  route: FlightRoute | null;
+  routeLoading: boolean;
+  history: HistoryPoint[];
 }) {
-  const [photo, setPhoto] = useState<Photo | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setPhoto(null);
-    loadPhoto(hex)
-      .catch(() => null)
-      .then((result) => {
-        if (active) {
-          setPhoto(result);
-          setLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [hex]);
   const ac = aircraft;
   return (
     <aside className="glass inspector" aria-label="Aircraft inspector">
@@ -76,8 +63,40 @@ export default function Inspector({
                 {ac?.type || "—"}
               </div>
             </div>
-            <span className="text-3xl text-muted">✈</span>
+            <button
+              className="watch-button"
+              aria-label={
+                watched ? "Remove from watchlist" : "Add to watchlist"
+              }
+              aria-pressed={watched}
+              onClick={onToggleWatch}
+            >
+              {watched ? "★" : "☆"}
+            </button>
           </div>
+          {ac && (
+            <div className="source-label">
+              <span className="badge">{ac.feedSource.toUpperCase()}</span>
+              {ac.feedSource === "local" && ac.rssi !== null && (
+                <span>{ac.rssi.toFixed(1)} dBFS</span>
+              )}
+            </div>
+          )}
+          {route && (
+            <div className="route-summary">
+              <strong>
+                {route.origin?.icao ?? route.origin?.iata ?? "—"} →{" "}
+                {route.destination?.icao ?? route.destination?.iata ?? "—"}
+              </strong>
+              <span>
+                {route.origin?.city ?? route.origin?.name ?? "Unknown origin"} →{" "}
+                {route.destination?.city ??
+                  route.destination?.name ??
+                  "Unknown destination"}
+              </span>
+            </div>
+          )}
+          {routeLoading && <p className="detail-credit">Looking up route…</p>}
           {!ac && (
             <div className="signal-lost" role="status">
               ◌ Signal lost
@@ -85,44 +104,19 @@ export default function Inspector({
             </div>
           )}
           <div className="my-4 flex flex-wrap gap-2">
-            {ac?.isMilitary && <span className="badge military">Military</span>}
+            {ac?.isMilitary && <span className="badge military">MILITARY</span>}
             {ac && isEmergency(ac.squawk) && (
               <span className="badge emergency">
                 Emergency · {ac.squawk} {emergencyMeaning[ac.squawk!]}
               </span>
             )}
             {ac?.isInteresting && (
-              <span className="badge interesting">Interesting</span>
+              <span className="badge interesting">VIP / INTERESTING</span>
             )}
+            {ac?.isLADD && <span className="badge">LADD</span>}
+            {ac?.isPIA && <span className="badge">PIA</span>}
           </div>
-          <div className="photo-card">
-            {loading ? (
-              <div
-                className="photo-skeleton"
-                aria-label="Loading aircraft photo"
-              />
-            ) : photo?.thumbnail ? (
-              <>
-                <Image
-                  unoptimized
-                  src={photo.thumbnail}
-                  alt={ac?.reg ? "Aircraft " + ac.reg : "Selected aircraft"}
-                  width={640}
-                  height={420}
-                  onError={() => setPhoto(null)}
-                />
-                <a href={photo.link} target="_blank" rel="noreferrer">
-                  © {photo.photographer || "Planespotters.net"} ↗
-                </a>
-              </>
-            ) : (
-              <div className="photo-placeholder">
-                <span>✈</span>
-                <p>No photo available</p>
-                <small>Aircraft photo</small>
-              </div>
-            )}
-          </div>
+          <PhotoCarousel hex={hex} registration={ac?.reg} />
           <div className="section-label">
             Telemetry <span>Live</span>
           </div>
@@ -190,6 +184,13 @@ export default function Inspector({
               Seen <b>{ac?.seen == null ? "—" : ac.seen.toFixed(1) + "s"}</b>
             </span>
           </div>
+          <AircraftDetails
+            hex={hex}
+            aircraft={ac}
+            route={route}
+            history={history}
+            settings={settings}
+          />
           <div className="inspector-note">
             <span className="status-dot bg-subtle" /> Positions extrapolated
             between receiver updates.

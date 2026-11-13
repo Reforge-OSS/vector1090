@@ -16,6 +16,11 @@ export interface TrailPoint {
   alt: Aircraft["alt_baro"];
 }
 export type Trails = Map<string, TrailPoint[]>;
+export interface HistoryPoint {
+  time: number;
+  alt: Aircraft["alt_baro"];
+  gs: number | null;
+}
 export type FeedStatus =
   "connecting" | "online" | "partial" | "paused" | "rate-limited" | "error";
 
@@ -33,6 +38,7 @@ export function useAircraftFeed(
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [stale, setStale] = useState(false);
   const trailsRef = useRef<Trails>(new Map());
+  const historyRef = useRef(new Map<string, HistoryPoint[]>());
   const lastSeenRef = useRef(new Map<string, number>());
   const retryNotBefore = useRef(0);
   const {
@@ -78,6 +84,7 @@ export function useAircraftFeed(
       setRetryAfter(null);
       setStale(false);
       trailsRef.current.clear();
+      historyRef.current.clear();
       lastSeenRef.current.clear();
       retryNotBefore.current = 0;
     }
@@ -99,6 +106,12 @@ export function useAircraftFeed(
       for (const ac of body.aircraft) {
         const observedAt = received - Math.max(0, ac.seen ?? 0) * 1000;
         lastSeenRef.current.set(ac.hex, observedAt);
+        const history = historyRef.current.get(ac.hex) ?? [];
+        if (!history.length || observedAt > history[history.length - 1].time) {
+          history.push({ time: observedAt, alt: ac.alt_baro, gs: ac.gs });
+          if (history.length > 600) history.splice(0, history.length - 600);
+          historyRef.current.set(ac.hex, history);
+        }
         if (ac.lat === null || ac.lon === null) continue;
         const trail = trailsRef.current.get(ac.hex) ?? [];
         const last = trail[trail.length - 1];
@@ -111,6 +124,7 @@ export function useAircraftFeed(
       for (const [hex, seen] of lastSeenRef.current) {
         if (Date.now() - seen > 300_000) {
           trailsRef.current.delete(hex);
+          historyRef.current.delete(hex);
           lastSeenRef.current.delete(hex);
         }
       }
@@ -221,6 +235,7 @@ export function useAircraftFeed(
     lastUpdate,
     total,
     trailsRef,
+    historyRef,
     sources,
     retryAfter,
     stale,

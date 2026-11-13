@@ -29,6 +29,7 @@ interface Props {
   showAllTrails: boolean;
   units: Settings["units"];
   onViewportChange: (viewport: MapViewport) => void;
+  watchlist: ReadonlySet<string>;
 }
 const paths = {
   jet: "M32 3 Q35 3 35 12 L35 25 L56 40 L56 45 L35 37 L35 52 L43 58 L43 61 L32 57 L21 61 L21 58 L29 52 L29 37 L8 45 L8 40 L29 25 L29 12 Q29 3 32 3Z",
@@ -199,6 +200,21 @@ export default function RadarMap(props: Props) {
         },
       });
       map.addLayer({
+        id: "watchlist",
+        type: "circle",
+        source: "aircraft",
+        filter: ["==", ["get", "watched"], true],
+        paint: {
+          "circle-radius": 24,
+          "circle-color": palette.primary,
+          "circle-opacity": 0.04,
+          "circle-stroke-color": palette.primary,
+          "circle-stroke-width": 2,
+          "circle-stroke-opacity": 0.3,
+          "circle-blur": 0.15,
+        },
+      });
+      map.addLayer({
         id: "selection",
         type: "circle",
         source: "aircraft",
@@ -316,6 +332,7 @@ export default function RadarMap(props: Props) {
               ? EMERGENCY_COLOR
               : altitudeColor(ac.alt_baro),
             selected: ac.hex === current.selectedHex,
+            watched: current.watchlist.has(ac.hex),
             emergency: isEmergency(ac.squawk),
           });
           aircraftData.features.push(feature);

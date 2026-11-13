@@ -125,8 +125,10 @@ describe("aircraft feed", () => {
     expect(result.current.status).toBe("online");
     expect(result.current.aircraft).toEqual([sample]);
     expect(result.current.trailsRef.current.get(sample.hex)).toHaveLength(1);
+    expect(result.current.historyRef.current.get(sample.hex)).toHaveLength(1);
     await advance(10000);
     expect(result.current.trailsRef.current.get(sample.hex)).toHaveLength(1);
+    expect(result.current.historyRef.current.get(sample.hex)).toHaveLength(2);
     fetcher.mockResolvedValueOnce(success([{ ...sample, lon: 0 }]));
     await advance(10000);
     expect(result.current.trailsRef.current.get(sample.hex)).toHaveLength(2);
@@ -134,6 +136,7 @@ describe("aircraft feed", () => {
     await advance(310000);
     expect(result.current.aircraft).toEqual([]);
     expect(result.current.trailsRef.current.size).toBe(0);
+    expect(result.current.historyRef.current.size).toBe(0);
   });
   it("retains data across failures and pauses but clears it on source changes", async () => {
     fetcher.mockImplementation(async () => success());

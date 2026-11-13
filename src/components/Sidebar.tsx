@@ -53,6 +53,7 @@ export default function Sidebar(p: Props) {
               ["low", "Low Alt < 15k ft"],
               ["military", "Military"],
               ["emergency", "Emergency"],
+              ["watchlist", "Watchlist"],
             ] as const
           ).map(([value, label]) => (
             <button

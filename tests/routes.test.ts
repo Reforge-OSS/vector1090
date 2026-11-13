@@ -317,7 +317,7 @@ describe("photo route", () => {
       const result = await request();
       expect(result.status).toBe(502);
       expect(result.headers.get("Cache-Control")).toBe("no-store");
-      expect(await result.json()).toEqual({ photo: null });
+      expect(await result.json()).toEqual({ photo: null, photos: [] });
       fetcher.mockResolvedValueOnce(Response.json({ photos: [photo] }));
       expect((await request()).status).toBe(200);
       expect(fetcher).toHaveBeenCalledTimes(2);

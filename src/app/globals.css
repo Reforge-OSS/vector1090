@@ -415,6 +415,159 @@ kbd {
   height: 175px;
   background: var(--raised);
 }
+.photo-arrow {
+  position: absolute;
+  top: 68px;
+  width: 28px;
+  height: 38px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--primary);
+  background: var(--overlay);
+  font-size: 25px;
+}
+.photo-arrow.previous {
+  left: 6px;
+}
+.photo-arrow.next {
+  right: 6px;
+}
+.photo-dots {
+  position: absolute;
+  top: 158px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.photo-dots button {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--primary);
+  border-radius: 50%;
+  background: var(--overlay);
+}
+.photo-dots button[aria-current] {
+  background: var(--primary);
+}
+.watch-button {
+  font-size: 26px;
+  color: var(--muted);
+  padding: 0 3px;
+}
+.watch-button[aria-pressed="true"] {
+  color: var(--primary);
+}
+.source-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  font: 9px var(--mono);
+  color: var(--muted);
+}
+.route-summary {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.route-summary strong {
+  font: 12px var(--mono);
+  color: var(--primary);
+}
+.aircraft-details {
+  margin-top: 24px;
+}
+.detail-tabs {
+  display: grid;
+  grid-template-columns: 1.2fr 1.4fr 0.7fr;
+  gap: 3px;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 8px;
+}
+.detail-tabs button {
+  font-size: 9px;
+  color: var(--muted);
+  padding: 8px 4px;
+  border-radius: 4px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.detail-tabs button[aria-pressed="true"] {
+  background: var(--hover);
+  color: var(--primary);
+}
+.detail-rows > div {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hairline);
+  padding: 11px 0;
+  font-size: 10px;
+}
+.detail-rows dt {
+  color: var(--subtle);
+  flex-shrink: 0;
+}
+.detail-rows dd {
+  text-align: right;
+  color: var(--primary);
+  overflow-wrap: anywhere;
+}
+.nav-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.detail-empty {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 18px 0;
+}
+.detail-credit {
+  font-size: 9px;
+  color: var(--subtle);
+  margin-top: 12px;
+}
+.history-chart {
+  margin-top: 18px;
+}
+.history-chart > div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+}
+.history-chart b {
+  font: 10px var(--mono);
+}
+.history-chart svg {
+  margin-top: 8px;
+  width: 100%;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .detail-panel {
+    animation: detail-in 0.18s ease-out;
+  }
+  @keyframes detail-in {
+    from {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
 .photo-placeholder {
   height: 175px;
   display: flex;

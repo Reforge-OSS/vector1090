@@ -11,6 +11,8 @@ import SettingsModal from "@/components/SettingsModal";
 import AtcPlayer from "@/components/AtcPlayer";
 import { filterAircraft, type AircraftFilter } from "@/lib/filters";
 import type { MapViewport } from "@/lib/types";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import { useCallsignRoute } from "@/hooks/useAircraftMetadata";
 
 const RadarMap = dynamic(() => import("@/components/RadarMap"), { ssr: false });
 export default function Home() {
@@ -31,6 +33,10 @@ export default function Home() {
     debouncedViewport,
   );
   const [selectedHex, setSelectedHex] = useState<string | null>(null);
+  const { watchlist, toggleWatch } = useWatchlist();
+  const selectedAircraft = feed.aircraft.find((ac) => ac.hex === selectedHex);
+  const routeLookup = useCallsignRoute(selectedAircraft?.flight);
+  const selectedRoute = routeLookup.data;
   const [trails, setTrails] = useState(false);
   const [sidebar, setSidebar] = useState(true);
   const [modal, setModal] = useState(false);
@@ -38,8 +44,8 @@ export default function Home() {
   const [filter, setFilter] = useState<AircraftFilter>("all");
   const searchRef = useRef<HTMLInputElement>(null);
   const visible = useMemo(
-    () => filterAircraft(feed.aircraft, search, filter, settings),
-    [feed.aircraft, search, filter, settings],
+    () => filterAircraft(feed.aircraft, search, filter, settings, watchlist),
+    [feed.aircraft, search, filter, settings, watchlist],
   );
   useEffect(() => {
     function shortcut(e: KeyboardEvent) {
@@ -93,6 +99,7 @@ export default function Home() {
         showAllTrails={trails}
         units={settings.units}
         onViewportChange={setViewport}
+        watchlist={watchlist}
       />
       <TopHud
         mode={settings.mode}
@@ -124,8 +131,13 @@ export default function Home() {
         <Inspector
           key={selectedHex}
           hex={selectedHex}
-          aircraft={feed.aircraft.find((ac) => ac.hex === selectedHex)}
+          aircraft={selectedAircraft}
           settings={settings}
+          watched={watchlist.has(selectedHex)}
+          onToggleWatch={() => toggleWatch(selectedHex)}
+          route={selectedRoute}
+          routeLoading={routeLookup.loading}
+          history={feed.historyRef.current.get(selectedHex) ?? []}
           onClose={() => setSelectedHex(null)}
         />
       )}
