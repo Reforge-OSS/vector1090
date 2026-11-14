@@ -40,7 +40,7 @@ const validCoordinates = (point: Coordinates) =>
   Math.abs(point.lat) <= 90 &&
   Number.isFinite(point.lon) &&
   Math.abs(point.lon) <= 180;
-export const wrapLongitude = (lon: number) =>
+const wrapLongitude = (lon: number) =>
   ((((lon + 180) % 360) + 360) % 360) - 180;
 export function unwrapLine(points: Position[]): Position[] {
   const result: Position[] = [];

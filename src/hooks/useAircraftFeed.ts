@@ -10,7 +10,7 @@ import type {
   Settings,
 } from "@/lib/types";
 
-export interface TrailPoint {
+interface TrailPoint {
   lon: number;
   lat: number;
   alt: Aircraft["alt_baro"];

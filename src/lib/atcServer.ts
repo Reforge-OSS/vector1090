@@ -22,7 +22,7 @@ const state: State = (globals[key] ??= {
 const { cache, pending } = state;
 const ibonavBase = "https://atc1.ibosoft.net.tr:2096";
 const agent = "vector1090/1.2 (+https://github.com/Reforge-OSS/vector1090)";
-export function atcRetryAfter(value: string | null): number {
+function atcRetryAfter(value: string | null): number {
   const seconds =
     value && /^\d+(\.\d+)?$/.test(value)
       ? Number(value)

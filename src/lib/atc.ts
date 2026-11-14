@@ -1,5 +1,5 @@
 import { distanceNm } from "./geo";
-export type AtcProvider = "icecast" | "ibonav" | "custom";
+type AtcProvider = "icecast" | "ibonav" | "custom";
 export interface AtcChannel {
   id: string;
   provider: AtcProvider;
