@@ -57,7 +57,8 @@ export class FeedProxy {
     const normalized = normalizePublicQuery(query);
     const key = "public:" + JSON.stringify(normalized);
     if (Date.now() < this.publicRetryNotBefore) {
-      const previous = this.cache.get(key)?.lastGood;
+      const cached = this.cache.get(key)?.result;
+      const previous = cached?.available ? cached : undefined;
       return Promise.resolve({
         aircraft: previous?.aircraft ?? [],
         now: previous?.now ?? Date.now() / 1000,
@@ -97,7 +98,14 @@ export class FeedProxy {
       .catch((error) => ({
         aircraft: [],
         now: Date.now() / 1000,
-        status: "error" as const,
+        status:
+          error instanceof UpstreamError && error.limited
+            ? ("rate_limited" as const)
+            : ("error" as const),
+        retryAfter:
+          error instanceof UpstreamError && error.limited
+            ? this.remainingCooldown()
+            : undefined,
         available: false,
         error:
           error instanceof UpstreamError
@@ -106,7 +114,11 @@ export class FeedProxy {
         cache: "miss" as const,
       }))
       .then((result) => {
-        if (result.status === "rate_limited" && previous?.lastGood) {
+        if (
+          result.status === "rate_limited" &&
+          !result.available &&
+          previous?.lastGood
+        ) {
           result = {
             ...previous.lastGood,
             status: "rate_limited",
@@ -147,25 +159,52 @@ export class FeedProxy {
         ? ["/v2/mil", "/v2/sqk/7700"]
         : [`/v2/lat/${query.lat}/lon/${query.lon}/dist/${query.radius}`];
     const results = await Promise.allSettled(
-      paths.map((path) => this.request(base + path, "public")),
+      paths.map((path) =>
+        query.scope === "global"
+          ? this.memoize("public-part:" + base + path, 8000, () =>
+              this.request(base + path, "public"),
+            )
+          : this.request(base + path, "public"),
+      ),
     );
     const good = results.flatMap((result) =>
-      result.status === "fulfilled" ? [result.value] : [],
+      result.status === "fulfilled" && result.value.available
+        ? [result.value]
+        : [],
     );
     const errors = results.flatMap((result) =>
-      result.status === "rejected" ? [result.reason] : [],
+      result.status === "rejected"
+        ? [result.reason]
+        : result.value.status !== "ok"
+          ? [
+              new UpstreamError(
+                result.value.error ?? "upstream_fetch_failed",
+                result.value.status === "rate_limited",
+              ),
+            ]
+          : [],
     );
     const limited = errors.some(
       (error) => error instanceof UpstreamError && error.limited,
     );
+    const now = good.length
+      ? Math.max(...good.map((result) => result.now))
+      : Date.now() / 1000;
     return {
       aircraft: mergeFeeds(
         [],
-        good.flatMap((result) => result.aircraft),
+        good.flatMap((result) =>
+          result.aircraft.map((aircraft) => ({
+            ...aircraft,
+            seen:
+              aircraft.seen === null
+                ? null
+                : aircraft.seen + Math.max(0, now - result.now),
+          })),
+        ),
       ),
-      now: good.length
-        ? Math.max(...good.map((result) => result.now))
-        : Date.now() / 1000,
+      now,
+      stale: good.some((result) => result.stale) || undefined,
       available: good.length > 0,
       status: limited ? "rate_limited" : errors.length ? "error" : "ok",
       retryAfter: limited ? this.remainingCooldown() : undefined,

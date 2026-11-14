@@ -211,6 +211,60 @@ describe("viewport queries", () => {
 });
 
 describe("shared upstream protection", () => {
+  it.each(["/v2/mil", "/v2/sqk/7700"])(
+    "retains fresh global aircraft when %s is rate limited",
+    async (limitedPath) => {
+      const proxy = new FeedProxy(fetcher);
+      fetcher.mockImplementation(async (url) =>
+        Response.json({
+          ac: [
+            {
+              hex: String(url).endsWith(limitedPath) ? "abc123" : "def456",
+              seen: 0,
+            },
+          ],
+        }),
+      );
+      await proxy.publicFeed({ scope: "global" });
+      vi.setSystemTime(Date.now() + 8001);
+      fetcher.mockImplementation(async (url) =>
+        String(url).endsWith(limitedPath)
+          ? new Response(null, {
+              status: 429,
+              headers: { "Retry-After": "12" },
+            })
+          : Response.json({ ac: [{ hex: "fed321", squawk: "7700", seen: 0 }] }),
+      );
+      const result = await proxy.publicFeed({ scope: "global" });
+      expect(result).toMatchObject({
+        status: "rate_limited",
+        stale: true,
+        retryAfter: 12,
+      });
+      expect(result.aircraft.map((ac) => ac.hex).sort()).toEqual([
+        "abc123",
+        "fed321",
+      ]);
+      expect(
+        result.aircraft.find((ac) => ac.hex === "abc123")!.seen,
+      ).toBeCloseTo(8.001);
+      expect((await proxy.publicFeed({ scope: "global" })).aircraft).toEqual(
+        result.aircraft,
+      );
+      expect(fetcher).toHaveBeenCalledTimes(4);
+    },
+  );
+  it("keeps a successful global subfeed without a previous cache entry", async () => {
+    fetcher
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      .mockResolvedValueOnce(Response.json({ ac: [{ hex: "fed321" }] }));
+    const result = await new FeedProxy(fetcher).publicFeed({ scope: "global" });
+    expect(result).toMatchObject({
+      status: "rate_limited",
+      available: true,
+      aircraft: [{ hex: "fed321" }],
+    });
+  });
   it("coalesces normalized concurrent requests and caches them for eight seconds", async () => {
     let finish!: (response: Response) => void;
     fetcher.mockImplementationOnce(
