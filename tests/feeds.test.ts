@@ -212,6 +212,59 @@ describe("viewport queries", () => {
 
 describe("shared upstream protection", () => {
   it.each(["/v2/mil", "/v2/sqk/7700"])(
+    "prefers fresh telemetry over a duplicate cached observation from %s",
+    async (limitedPath) => {
+      const proxy = new FeedProxy(fetcher);
+      fetcher.mockImplementation(async () =>
+        Response.json({
+          ac: [
+            {
+              hex: "abc123",
+              squawk: "7700",
+              lat: 40,
+              lon: -74,
+              alt_baro: 10000,
+              seen: 0,
+            },
+          ],
+        }),
+      );
+      await proxy.publicFeed({ scope: "global" });
+      vi.setSystemTime(Date.now() + 8001);
+      fetcher.mockImplementation(async (url) =>
+        String(url).endsWith(limitedPath)
+          ? new Response(null, {
+              status: 429,
+              headers: { "Retry-After": "12" },
+            })
+          : Response.json({
+              ac: [
+                {
+                  hex: "abc123",
+                  squawk: "7700",
+                  lat: 41,
+                  lon: -73,
+                  alt_baro: 9000,
+                  seen: 0,
+                },
+              ],
+            }),
+      );
+      const result = await proxy.publicFeed({ scope: "global" });
+      expect(result.status).toBe("rate_limited");
+      expect(result.aircraft).toHaveLength(1);
+      expect(result.aircraft[0]).toMatchObject({
+        hex: "abc123",
+        squawk: "7700",
+        lat: 41,
+        lon: -73,
+        alt_baro: 9000,
+        seen: 0,
+        stale: false,
+      });
+    },
+  );
+  it.each(["/v2/mil", "/v2/sqk/7700"])(
     "retains fresh global aircraft when %s is rate limited",
     async (limitedPath) => {
       const proxy = new FeedProxy(fetcher);

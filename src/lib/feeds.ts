@@ -8,6 +8,8 @@ export function mergeFeeds(
   const merged = new Map<string, Aircraft>();
   for (const aircraft of publicFeed) {
     const hex = aircraft.hex.trim().toLowerCase();
+    const previous = merged.get(hex);
+    if (previous && !previous.stale && aircraft.stale) continue;
     merged.set(hex, { ...aircraft, hex, feedSource: "public" });
   }
   for (const aircraft of local) {
