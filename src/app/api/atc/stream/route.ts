@@ -1,5 +1,5 @@
 import {
-  atcChannels,
+  atcChannel,
   atcUpstream,
   ibonavRetryAfter,
   limitIbonav,
@@ -7,8 +7,7 @@ import {
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id");
-  const { channels } = await atcChannels();
-  const channel = channels.find((c) => c.id === id);
+  const channel = await atcChannel(id);
   const failure = (status: number, retryAfter = 0) =>
     Response.json(
       { error: "Stream unavailable" },

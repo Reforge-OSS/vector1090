@@ -156,6 +156,12 @@ async function providerChannels(provider: Provider): Promise<Result> {
     pending.delete(provider);
   }
 }
+export async function atcChannel(id: string | null) {
+  const provider = id?.split(":", 1)[0];
+  if (provider !== "icecast" && provider !== "ibonav") return undefined;
+  const { channels } = await providerChannels(provider);
+  return channels.find((channel) => channel.id === id);
+}
 export async function atcChannels() {
   const [icecast, ibonav] = await Promise.all([
     providerChannels("icecast"),

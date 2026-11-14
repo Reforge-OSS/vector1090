@@ -163,6 +163,68 @@ describe("ATC channels API", () => {
   });
 });
 describe("stream proxy", () => {
+  it.each(["icecast", "ibonav"] as const)(
+    "starts %s playback without waiting for unrelated provider discovery",
+    async (provider) => {
+      vi.useFakeTimers();
+      vi.stubEnv("ATC_ICECAST_URL", "http://receiver");
+      vi.stubEnv("IBONAV_ATC_TOKEN", "test-token");
+      fetcher.mockImplementation(async (input) => {
+        const url = String(input);
+        const selected =
+          provider === "icecast"
+            ? url.includes("receiver")
+            : !url.includes("receiver");
+        if (!selected) return new Promise<Response>(() => {});
+        if (url.includes("channels.json")) return Response.json(pages);
+        if (url.includes("status-json.xsl")) return Response.json(status);
+        return new Response(new Uint8Array([1]), {
+          headers: { "Content-Type": "audio/mpeg" },
+        });
+      });
+      const { GET } = await import("@/app/api/atc/stream/route");
+      const id = provider === "icecast" ? "icecast:/tower" : "ibonav:/TOWER";
+      for (const elapsed of [0, 60001]) {
+        vi.advanceTimersByTime(elapsed);
+        const playback = Promise.race([
+          GET(
+            new Request(
+              "http://app/api/atc/stream?id=" + encodeURIComponent(id),
+            ),
+          ),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+        ]);
+        await vi.advanceTimersByTimeAsync(8000);
+        const response = await playback;
+        expect(response?.status).toBe(200);
+        await response!.body!.cancel();
+      }
+      expect(
+        fetcher.mock.calls.every(([input]) =>
+          provider === "icecast"
+            ? String(input).includes("receiver")
+            : !String(input).includes("receiver"),
+        ),
+      ).toBe(true);
+    },
+  );
+  it.each(["", "custom:/tower", "unknown:/tower"])(
+    "rejects an invalid provider ID without discovery: %s",
+    async (id) => {
+      vi.stubEnv("ATC_ICECAST_URL", "http://receiver");
+      const { GET } = await import("@/app/api/atc/stream/route");
+      expect(
+        (
+          await GET(
+            new Request(
+              "http://app/api/atc/stream?id=" + encodeURIComponent(id),
+            ),
+          )
+        ).status,
+      ).toBe(404);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
   it("streams chunks without buffering and cancels upstream on disconnect", async () => {
     vi.stubEnv("ATC_ICECAST_URL", "http://receiver");
     const cancelled = vi.fn();
