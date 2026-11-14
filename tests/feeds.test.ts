@@ -8,6 +8,7 @@ import {
   viewportRadius,
 } from "@/lib/feeds";
 import { normalizeAircraft } from "@/lib/normalize";
+import { distanceNm } from "@/lib/geo";
 import type { PublicQuery } from "@/lib/types";
 
 const area: PublicQuery = {
@@ -133,6 +134,26 @@ describe("feed merging and normalization", () => {
 });
 
 describe("viewport queries", () => {
+  it("covers the requested circle after shifting its center, up to the API cap", () => {
+    for (const radius of [25, 50, 100, 150, 245, 250]) {
+      const query = { scope: "area" as const, lat: 0.124, lon: 0.124, radius };
+      const normalized = normalizePublicQuery(query);
+      if (normalized.scope !== "area") throw new Error("Expected area");
+      const shift = distanceNm(
+        query.lat,
+        query.lon,
+        normalized.lat,
+        normalized.lon,
+      );
+      expect(normalized.radius).toBeGreaterThanOrEqual(
+        Math.min(250, radius + shift),
+      );
+      expect(normalized.radius).toBeLessThanOrEqual(250);
+    }
+    expect(
+      normalizePublicQuery({ scope: "area", lat: 0, lon: 0, radius: 25 }),
+    ).toEqual({ scope: "area", lat: 0, lon: 0, radius: 25 });
+  });
   it.each([
     [-1, 1],
     [0, 1],

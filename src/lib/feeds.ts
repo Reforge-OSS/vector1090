@@ -49,11 +49,16 @@ export function viewportQuery(
 
 export function normalizePublicQuery(query: PublicQuery): PublicQuery {
   if (query.scope === "global") return { scope: "global" };
-  const radius = clampViewportRadius(query.radius);
+  const lat = Math.round(query.lat * 4) / 4;
+  const lon = Math.round(query.lon * 4) / 4;
+  const radius = clampViewportRadius(
+    clampViewportRadius(query.radius) +
+      distanceNm(query.lat, query.lon, lat, lon),
+  );
   return {
     scope: "area",
-    lat: Math.round(query.lat * 4) / 4,
-    lon: Math.round(query.lon * 4) / 4,
+    lat,
+    lon,
     radius: [25, 50, 100, 150, 250].find((bucket) => bucket >= radius)!,
   };
 }
