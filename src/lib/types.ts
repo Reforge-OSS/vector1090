@@ -1,6 +1,7 @@
 export interface Aircraft {
   hex: string;
   feedSource: "local" | "public";
+  stale?: boolean;
   rssi: number | null;
   flight: string | null;
   reg: string | null;

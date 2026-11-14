@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
   const atResponseTime = (result: SourceResult | undefined) =>
     result?.aircraft.map((aircraft) => ({
       ...aircraft,
+      stale: aircraft.stale ?? result.stale ?? false,
       seen:
         aircraft.seen === null
           ? null

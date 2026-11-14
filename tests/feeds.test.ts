@@ -248,8 +248,16 @@ describe("shared upstream protection", () => {
       expect(
         result.aircraft.find((ac) => ac.hex === "abc123")!.seen,
       ).toBeCloseTo(8.001);
-      expect((await proxy.publicFeed({ scope: "global" })).aircraft).toEqual(
-        result.aircraft,
+      const cooldown = await proxy.publicFeed({ scope: "global" });
+      expect(cooldown.aircraft.map((ac) => ac.hex)).toEqual(
+        result.aircraft.map((ac) => ac.hex),
+      );
+      expect(cooldown.aircraft.every((ac) => ac.stale)).toBe(true);
+      expect(result.aircraft.find((ac) => ac.hex === "fed321")!.stale).toBe(
+        false,
+      );
+      expect(result.aircraft.find((ac) => ac.hex === "abc123")!.stale).toBe(
+        true,
       );
       expect(fetcher).toHaveBeenCalledTimes(4);
     },

@@ -60,7 +60,11 @@ export class FeedProxy {
       const cached = this.cache.get(key)?.result;
       const previous = cached?.available ? cached : undefined;
       return Promise.resolve({
-        aircraft: previous?.aircraft ?? [],
+        aircraft:
+          previous?.aircraft.map((aircraft) => ({
+            ...aircraft,
+            stale: true,
+          })) ?? [],
         now: previous?.now ?? Date.now() / 1000,
         available: !!previous,
         status: "rate_limited",
@@ -121,6 +125,10 @@ export class FeedProxy {
         ) {
           result = {
             ...previous.lastGood,
+            aircraft: previous.lastGood.aircraft.map((aircraft) => ({
+              ...aircraft,
+              stale: true,
+            })),
             status: "rate_limited",
             retryAfter: this.remainingCooldown(),
             stale: true,
@@ -196,6 +204,7 @@ export class FeedProxy {
         good.flatMap((result) =>
           result.aircraft.map((aircraft) => ({
             ...aircraft,
+            stale: aircraft.stale ?? result.stale ?? false,
             seen:
               aircraft.seen === null
                 ? null

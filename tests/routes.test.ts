@@ -237,6 +237,32 @@ describe("aircraft route", () => {
     ).toBe(2);
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+  it("marks stale public aircraft individually without hiding fresh local emergencies", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("LOCAL_RECEIVER_URL", "http://receiver/feed");
+    fetcher.mockResolvedValueOnce(
+      Response.json({ ac: [{ hex: "def456", squawk: "7700", seen: 0 }] }),
+    );
+    await aircraft();
+    vi.advanceTimersByTime(8001);
+    fetcher.mockImplementation(async (url) =>
+      String(url) === "http://receiver/feed"
+        ? Response.json({
+            aircraft: [{ hex: "abc123", squawk: "7600", seen: 0 }],
+          })
+        : new Response(null, { status: 429, headers: { "Retry-After": "60" } }),
+    );
+    const response = await aircraft("?mode=hybrid");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      stale: true,
+      sources: { local: "ok", public: "rate_limited" },
+      aircraft: [
+        { hex: "def456", feedSource: "public", stale: true },
+        { hex: "abc123", feedSource: "local", stale: false },
+      ],
+    });
+  });
   it("disables an unconfigured hybrid receiver and still serves public aircraft", async () => {
     fetcher.mockResolvedValueOnce(Response.json({ ac: [] }));
     expect(await (await aircraft("?mode=hybrid")).json()).toMatchObject({

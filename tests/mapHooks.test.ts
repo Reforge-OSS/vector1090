@@ -221,6 +221,28 @@ it("selects emergencies and scopes dismissal to the hex+squawk pair, hiding stal
   );
   expect(screen.queryByLabelText("Emergency alerts")).toBeNull();
 });
+it("shows fresh local emergencies while hiding stale public observations in a degraded hybrid feed", () => {
+  render(
+    React.createElement(EmergencyAlerts, {
+      aircraft: [
+        { ...ac, stale: false },
+        {
+          ...ac,
+          hex: "def456",
+          flight: "STALE",
+          feedSource: "public",
+          stale: true,
+        },
+      ],
+      lastUpdate: Date.now(),
+      stale: true,
+      onSelect: vi.fn(),
+      onVisible: vi.fn(),
+    }),
+  );
+  expect(screen.getByText("BAW117")).toBeTruthy();
+  expect(screen.queryByText("STALE")).toBeNull();
+});
 it("removes the feed chip, offers layers and overhead selection, and closes on Escape", () => {
   const onLayer = vi.fn(),
     onSelect = vi.fn();

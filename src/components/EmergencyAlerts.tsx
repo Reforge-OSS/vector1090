@@ -24,7 +24,7 @@ export default function EmergencyAlerts({
   const alerts = aircraft.filter(
     (ac) =>
       isEmergency(ac.squawk) &&
-      !stale &&
+      !(ac.stale ?? stale) &&
       lastUpdate !== null &&
       (now - lastUpdate) / 1000 + (ac.seen ?? 0) < 60 &&
       !dismissed.has(ac.hex + ":" + ac.squawk),
