@@ -5,6 +5,7 @@ export function useReceiverConfig() {
   const [config, setConfig] = useState({
     allowClientLocalUrl: false,
     localUrlConfigured: false,
+    localReceiverConfigured: false,
   });
   useEffect(() => {
     let active = true;
@@ -18,6 +19,7 @@ export function useReceiverConfig() {
           setConfig({
             allowClientLocalUrl: data.allowClientLocalUrl === true,
             localUrlConfigured: data.localUrlConfigured === true,
+            localReceiverConfigured: data.localReceiverConfigured === true,
           });
       })
       .catch(() => {});

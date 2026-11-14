@@ -86,6 +86,28 @@ describe("settings", () => {
       DEFAULT_SETTINGS,
     );
   });
+  it("supports hybrid defaults/minimums and persisted viewport opt-out", () => {
+    expect(
+      sanitizeSettings({
+        mode: "hybrid",
+        pollIntervalSec: 1,
+        trackViewport: false,
+      }),
+    ).toMatchObject({
+      mode: "hybrid",
+      pollIntervalSec: 5,
+      trackViewport: false,
+    });
+    expect(sanitizeSettings({}).trackViewport).toBe(true);
+    const { result } = renderHook(useSettings);
+    act(() => result.current.setSettings({ mode: "local" }));
+    act(() => result.current.setSettings({ mode: "hybrid" }));
+    expect(result.current.settings.pollIntervalSec).toBe(10);
+    act(() =>
+      result.current.setSettings({ mode: "public", pollIntervalSec: 18 }),
+    );
+    expect(result.current.settings.pollIntervalSec).toBe(18);
+  });
 });
 
 describe("aircraft feed", () => {
@@ -103,8 +125,10 @@ describe("aircraft feed", () => {
     expect(result.current.status).toBe("online");
     expect(result.current.aircraft).toEqual([sample]);
     expect(result.current.trailsRef.current.get(sample.hex)).toHaveLength(1);
+    expect(result.current.historyRef.current.get(sample.hex)).toHaveLength(1);
     await advance(10000);
     expect(result.current.trailsRef.current.get(sample.hex)).toHaveLength(1);
+    expect(result.current.historyRef.current.get(sample.hex)).toHaveLength(2);
     fetcher.mockResolvedValueOnce(success([{ ...sample, lon: 0 }]));
     await advance(10000);
     expect(result.current.trailsRef.current.get(sample.hex)).toHaveLength(2);
@@ -112,6 +136,7 @@ describe("aircraft feed", () => {
     await advance(310000);
     expect(result.current.aircraft).toEqual([]);
     expect(result.current.trailsRef.current.size).toBe(0);
+    expect(result.current.historyRef.current.size).toBe(0);
   });
   it("retains data across failures and pauses but clears it on source changes", async () => {
     fetcher.mockImplementation(async () => success());
@@ -220,7 +245,11 @@ describe("aircraft feed", () => {
 describe("receiver policy", () => {
   it("fails closed and updates from server configuration", async () => {
     fetcher.mockResolvedValueOnce(
-      Response.json({ allowClientLocalUrl: true, localUrlConfigured: true }),
+      Response.json({
+        allowClientLocalUrl: true,
+        localUrlConfigured: true,
+        localReceiverConfigured: true,
+      }),
     );
     const { result } = renderHook(useReceiverConfig);
     expect(result.current.allowClientLocalUrl).toBe(false);
@@ -228,6 +257,7 @@ describe("receiver policy", () => {
     expect(result.current).toEqual({
       allowClientLocalUrl: true,
       localUrlConfigured: true,
+      localReceiverConfigured: true,
     });
   });
   it("stays locked when configuration is unavailable", async () => {

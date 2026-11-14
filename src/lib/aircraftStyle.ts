@@ -13,8 +13,22 @@ export function isEmergency(squawk: string | null): boolean {
 }
 export function iconKind(
   ac: Aircraft,
-): "jet" | "heavy" | "light" | "helicopter" | "military" {
+):
+  | "jet"
+  | "heavy"
+  | "light"
+  | "helicopter"
+  | "military"
+  | "vehicle"
+  | "unknown" {
+  if (ac.category === "C1" || ac.category === "C2") return "vehicle";
   if (ac.isMilitary) return "military";
+  if (
+    ac.category === "A0" ||
+    ac.category?.startsWith("B") ||
+    ac.category?.startsWith("C")
+  )
+    return "unknown";
   if (ac.category === "A7") return "helicopter";
   if (ac.category === "A5") return "heavy";
   if (ac.category === "A1" || ac.category === "A2") return "light";

@@ -1,5 +1,8 @@
 export interface Aircraft {
   hex: string;
+  feedSource: "local" | "public";
+  stale?: boolean;
+  rssi: number | null;
   flight: string | null;
   reg: string | null;
   type: string | null;
@@ -13,10 +16,51 @@ export interface Aircraft {
   category: string | null;
   isMilitary: boolean;
   isInteresting: boolean;
+  isPIA: boolean;
+  isLADD: boolean;
   seen: number | null;
+  ias: number | null;
+  tas: number | null;
+  mach: number | null;
+  alt_geom: number | null;
+  nav_altitude_mcp: number | null;
+  nav_qnh: number | null;
+  nav_modes: string[] | null;
+  wind_dir: number | null;
+  wind_speed: number | null;
+  roll: number | null;
+  mag_heading: number | null;
+  true_heading: number | null;
+  positionSource: string | null;
+  messages: number | null;
 }
-export type FeedMode = "public" | "local";
+export type FeedMode = "public" | "local" | "hybrid";
+export type SourceStatus = "ok" | "error" | "rate_limited" | "disabled";
+export interface FeedSources {
+  local: SourceStatus;
+  public: SourceStatus;
+}
+export interface Coordinates {
+  lat: number;
+  lon: number;
+}
+export interface MapBounds {
+  west: number;
+  east: number;
+  south: number;
+  north: number;
+}
+export interface MapViewport {
+  center: Coordinates;
+  bounds: MapBounds;
+  zoom: number;
+  radiusNm: number;
+}
+export type PublicQuery =
+  | { scope: "global" }
+  | { scope: "area"; lat: number; lon: number; radius: number };
 export interface Settings {
+  layers: LayerSettings;
   mode: FeedMode;
   localUrl: string;
   homeLat: number;
@@ -24,8 +68,23 @@ export interface Settings {
   radiusNm: number;
   units: "aviation" | "metric";
   pollIntervalSec: number;
+  trackViewport: boolean;
+}
+export interface LayerSettings {
+  rangeRings: boolean;
+  allTrails: boolean;
+  terminator: boolean;
+  weatherRadar: boolean;
+  receiverRange: boolean;
 }
 export const DEFAULT_SETTINGS: Settings = {
+  layers: {
+    rangeRings: true,
+    allTrails: false,
+    terminator: false,
+    weatherRadar: false,
+    receiverRange: false,
+  },
   mode: "public",
   localUrl: "http://localhost:8080/data/aircraft.json",
   homeLat: 52.8311,
@@ -33,10 +92,14 @@ export const DEFAULT_SETTINGS: Settings = {
   radiusNm: 50,
   units: "aviation",
   pollIntervalSec: 10,
+  trackViewport: true,
 };
 export interface AircraftResponse {
   aircraft: Aircraft[];
   now: number;
   mode: FeedMode;
   total: number;
+  sources: FeedSources;
+  retryAfter?: number;
+  stale?: boolean;
 }

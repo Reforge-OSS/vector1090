@@ -5,13 +5,13 @@ import ScrollPanel from "./ScrollPanel";
 export default function SettingsModal({
   settings,
   allowClientLocalUrl,
-  localUrlConfigured,
+  localReceiverConfigured,
   onSave,
   onClose,
 }: {
   settings: Settings;
   allowClientLocalUrl: boolean;
-  localUrlConfigured: boolean;
+  localReceiverConfigured: boolean;
   onSave: (settings: Settings) => void;
   onClose: () => void;
 }) {
@@ -23,7 +23,7 @@ export default function SettingsModal({
     dialog.current?.focus();
     return () => previous?.focus();
   }, []);
-  const field = (key: keyof Settings, value: string | number) =>
+  const field = (key: keyof Settings, value: string | number | boolean) =>
     setDraft((s) => ({ ...s, [key]: value }));
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -36,10 +36,14 @@ export default function SettingsModal({
       draft.radiusNm < 1 ||
       draft.radiusNm > 250 ||
       !Number.isFinite(draft.pollIntervalSec) ||
-      draft.pollIntervalSec < (draft.mode === "public" ? 5 : 1) ||
+      draft.pollIntervalSec < (draft.mode === "local" ? 1 : 5) ||
       draft.pollIntervalSec > 300
     ) {
       setError("Check coordinates, radius and polling interval.");
+      return;
+    }
+    if (draft.mode === "hybrid" && !localReceiverConfigured) {
+      setError("Configure LOCAL_RECEIVER_URL on the server to use Hybrid.");
       return;
     }
     if (draft.mode === "local" && allowClientLocalUrl) {
@@ -70,7 +74,7 @@ export default function SettingsModal({
         onKeyDown={(e) => {
           if (e.key !== "Tab") return;
           const focusable = dialog.current?.querySelectorAll<HTMLElement>(
-            "button,input,select",
+            "button:not(:disabled),input,select",
           );
           if (!focusable?.length) return;
           const first = focusable[0],
@@ -106,24 +110,34 @@ export default function SettingsModal({
             </p>
             <label className="field-label">Feed</label>
             <div className="mode-switch">
-              {(["public", "local"] as const).map((mode) => (
+              {(["public", "local", "hybrid"] as const).map((mode) => (
                 <button
                   type="button"
                   key={mode}
+                  disabled={mode === "hybrid" && !localReceiverConfigured}
                   aria-pressed={draft.mode === mode}
                   className={draft.mode === mode ? "active" : ""}
                   onClick={() =>
                     setDraft((s) => ({
                       ...s,
                       mode,
-                      pollIntervalSec: mode === "public" ? 10 : 2,
+                      pollIntervalSec: mode === "local" ? 2 : 10,
                     }))
                   }
                 >
-                  {mode === "public" ? "◉ Public API" : "⌁ Local receiver"}
+                  {mode === "public"
+                    ? "Public API"
+                    : mode === "hybrid"
+                      ? "Hybrid"
+                      : "Local receiver"}
                 </button>
               ))}
             </div>
+            {!localReceiverConfigured && (
+              <p className="text-xs text-muted">
+                Hybrid requires LOCAL_RECEIVER_URL on the server.
+              </p>
+            )}
             {draft.mode === "local" && (
               <label className="field-label">
                 Local aircraft.json URL
@@ -141,8 +155,8 @@ export default function SettingsModal({
                 {!allowClientLocalUrl && (
                   <span className="normal-case text-muted">
                     Server-managed:{" "}
-                    {localUrlConfigured
-                      ? "using LOCAL_AIRCRAFT_URL"
+                    {localReceiverConfigured
+                      ? "using the configured receiver URL"
                       : "using the server default URL"}
                     . Set ALLOW_CLIENT_LOCAL_URL=true on the server to enable
                     editing.
@@ -179,6 +193,15 @@ export default function SettingsModal({
               ))}
             </div>
             <div className="section-label">Display and updates</div>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={draft.trackViewport}
+                disabled={draft.mode === "local"}
+                onChange={(e) => field("trackViewport", e.target.checked)}
+              />
+              Follow map viewport
+            </label>
             <label className="field-label">
               Units
               <select
@@ -192,12 +215,12 @@ export default function SettingsModal({
             <label className="field-label">
               Polling interval · seconds{" "}
               <span className="normal-case text-subtle">
-                (min {draft.mode === "public" ? 5 : 1}s)
+                (min {draft.mode === "local" ? 1 : 5}s)
               </span>
               <input
                 required
                 type="number"
-                min={draft.mode === "public" ? 5 : 1}
+                min={draft.mode === "local" ? 1 : 5}
                 max={300}
                 value={
                   Number.isNaN(draft.pollIntervalSec)
