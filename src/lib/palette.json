@@ -1,0 +1,17 @@
+{
+  "canvas": "#0c0c0d",
+  "surface": "#141416",
+  "raised": "#1c1c1f",
+  "hover": "#242427",
+  "primary": "#e8e6e3",
+  "muted": "#a4a2a0",
+  "subtle": "#797779",
+  "ground": "#909093",
+  "sage": "#a8c3a0",
+  "sand": "#e2c799",
+  "powder": "#9fb8d8",
+  "lavender": "#b8acd9",
+  "rose": "#e59a9a",
+  "hairline": "#ffffff12",
+  "overlay": "#0c0c0dbd"
+}

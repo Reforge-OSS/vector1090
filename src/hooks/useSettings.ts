@@ -1,0 +1,87 @@
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import { DEFAULT_SETTINGS, type Settings } from "@/lib/types";
+
+const KEY = "vector1090:settings";
+export function sanitizeSettings(input: Partial<Settings>): Settings {
+  const merged = { ...DEFAULT_SETTINGS, ...input };
+  const layers =
+    input.layers && typeof input.layers === "object"
+      ? input.layers
+      : DEFAULT_SETTINGS.layers;
+  merged.layers = { ...DEFAULT_SETTINGS.layers };
+  for (const key of Object.keys(
+    DEFAULT_SETTINGS.layers,
+  ) as (keyof Settings["layers"])[]) {
+    if (typeof layers[key] === "boolean") merged.layers[key] = layers[key];
+  }
+  merged.mode =
+    merged.mode === "local" || merged.mode === "hybrid"
+      ? merged.mode
+      : "public";
+  merged.units = merged.units === "metric" ? "metric" : "aviation";
+  for (const key of [
+    "homeLat",
+    "homeLon",
+    "radiusNm",
+    "pollIntervalSec",
+  ] as const) {
+    if (typeof merged[key] !== "number" || !Number.isFinite(merged[key]))
+      merged[key] = DEFAULT_SETTINGS[key];
+  }
+  merged.homeLat = Math.max(-90, Math.min(90, merged.homeLat));
+  merged.homeLon = Math.max(-180, Math.min(180, merged.homeLon));
+  merged.radiusNm = Math.max(1, Math.min(250, merged.radiusNm));
+  merged.pollIntervalSec = Math.max(
+    merged.mode === "local" ? 1 : 5,
+    merged.pollIntervalSec,
+  );
+  if (typeof merged.localUrl !== "string")
+    merged.localUrl = DEFAULT_SETTINGS.localUrl;
+  if (typeof merged.trackViewport !== "boolean")
+    merged.trackViewport = DEFAULT_SETTINGS.trackViewport;
+  return merged;
+}
+export function useSettings() {
+  const [settings, setState] = useState<Settings>(DEFAULT_SETTINGS);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? "null");
+      if (stored && typeof stored === "object" && !Array.isArray(stored))
+        setState(sanitizeSettings(stored));
+    } catch {
+      /* Storage can be unavailable. */
+    }
+    setLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (loaded) {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(settings));
+      } catch {
+        /* Storage can be full. */
+      }
+    }
+  }, [settings, loaded]);
+  const setSettings = useCallback(
+    (
+      update: Partial<Settings> | ((previous: Settings) => Partial<Settings>),
+    ) => {
+      setState((previous) => {
+        const patch = typeof update === "function" ? update(previous) : update;
+        return sanitizeSettings({
+          ...previous,
+          ...patch,
+          ...(patch.mode &&
+          patch.mode !== previous.mode &&
+          patch.pollIntervalSec === undefined
+            ? { pollIntervalSec: patch.mode === "local" ? 2 : 10 }
+            : {}),
+        });
+      });
+    },
+    [],
+  );
+  return { settings, setSettings, loaded };
+}
